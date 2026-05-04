@@ -887,8 +887,9 @@ class Byd3DCard extends HTMLElement {
   _renderActionButton(key, title, icon, handler, active = false, extraClass = "") {
     const eid = this._resolveEntity(key);
     if (!eid) return "";
+    const feedbackClass = this._buttonFeedbacks?.has(key) ? "btn-feedback" : "";
     return `
-      <button class="action-btn ${active ? "active" : ""} ${extraClass}" data-action="${handler}" data-key="${key}">
+      <button class="action-btn ${active ? "active" : ""} ${extraClass} ${feedbackClass}" data-action="${handler}" data-key="${key}">
         <ha-icon icon="${icon}"></ha-icon>
         <span>${title}</span>
       </button>
@@ -1728,6 +1729,15 @@ class Byd3DCard extends HTMLElement {
         }
         .btn-feedback {
           animation: btn-pulse .45s ease;
+        }
+        .action-btn.btn-feedback {
+          border-color: rgba(255, 175, 43, .95);
+          background: linear-gradient(180deg, rgba(255, 166, 0, .95), rgba(204, 96, 0, .92));
+          box-shadow: 0 0 18px rgba(255, 166, 0, .35), inset 0 1px 0 rgba(255,255,255,.16);
+          color: #fff;
+        }
+        .action-btn.btn-feedback ha-icon {
+          color: #fff;
         }
         .active-category-content {
           margin-top: 2px;
