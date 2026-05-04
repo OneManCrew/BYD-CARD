@@ -480,11 +480,12 @@ class Byd3DCard extends HTMLElement {
     return `<div class="metric"><label>${label}</label><strong>${value}</strong></div>`;
   }
 
-  _category(title, content) {
+  _category(title, content, options = {}) {
     if (!content || content.trim() === "") return "";
+    const titleClass = options.titleClass || "";
     return `
       <section class="category">
-        <h3>${title}</h3>
+        <h3 class="${titleClass}">${title}</h3>
         ${content}
       </section>
     `;
@@ -558,6 +559,20 @@ class Byd3DCard extends HTMLElement {
     const range = toNumber(rangeState?.state);
     const isCharging = chargingState?.state === "on";
     const lowBattery = battery < 20;
+    const powerRaw = batteryPowerState?.state;
+    const powerNumeric = toNumber(powerRaw);
+    const powerUnit = batteryPowerState?.attributes?.unit_of_measurement || "W";
+    let powerDisplay = "-";
+    if (powerNumeric !== null) {
+      powerDisplay = `${powerNumeric.toFixed(1)} ${powerUnit}`;
+    } else if (
+      powerRaw !== undefined &&
+      powerRaw !== null &&
+      powerRaw !== "unknown" &&
+      powerRaw !== "unavailable"
+    ) {
+      powerDisplay = `${powerRaw} ${powerUnit}`;
+    }
 
     const tireKeys = [
       ["tire_fl", this._t("front_left")],
@@ -690,17 +705,11 @@ class Byd3DCard extends HTMLElement {
         <div class="wrap ${lowBattery ? "low" : ""}">
           <div class="hero">
             <img class="car-image" src="${imageUrl}" data-fallback="${profile.image}" alt="${profile.label}" />
-            <div class="hero-overlay">
-              <div class="hero-top">
-                <div class="title">${title}</div>
-                <div class="chip">${profile.label}</div>
-              </div>
-              <div class="hero-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
-            </div>
+            <div class="hero-overlay"></div>
           </div>
 
           ${this._category(
-            this._t("category_summary"),
+            title || this._t("category_summary"),
             `
           <div class="panel">
             <div class="battery-head">
@@ -711,16 +720,19 @@ class Byd3DCard extends HTMLElement {
                 <div class="battery-fill ${isCharging ? "charging" : ""}" style="width:${battery}%"></div>
                 <div class="battery-gloss"></div>
               </div>
-              <div class="battery-percent">${battery.toFixed(0)}%</div>
+              <div class="battery-side">
+                <div class="battery-percent">${battery.toFixed(0)}%</div>
+                <div class="battery-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
+              </div>
             </div>
             <div class="battery-sub">
               ${isCharging ? this._t("charging_active") : this._t("charging_inactive")} ·
-              ${this._t("power")}: ${batteryPowerState?.state ?? "-"}
+              ${this._t("power")}: <span class="power-value">${powerDisplay}</span>
             </div>
           </div>
           ${summaryMetrics}
           `
-          )}
+          , { titleClass: "category-title-main" })}
 
           ${climateCategory}
           ${vehicleCategory}
@@ -734,13 +746,16 @@ class Byd3DCard extends HTMLElement {
         ha-card {
           border-radius: 30px;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,.14);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.20), 0 28px 70px rgba(0,0,0,.58);
+          border: 1px solid rgba(150, 178, 210, .34);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.24),
+            0 0 0 1px rgba(120,170,220,.12),
+            0 28px 70px rgba(0,0,0,.62);
           background: transparent;
         }
         .wrap {
           background:
-            radial-gradient(circle at 20% 6%, #2f4862 0%, #111b26 58%, #070a10 100%);
+            radial-gradient(circle at 14% 4%, rgba(58,93,134,.7) 0%, rgba(26,38,55,.95) 44%, rgba(10,14,22,1) 100%);
           padding: 14px;
           color: #fff;
           font-family: "Segoe UI", "SF Pro Text", "Arial", sans-serif;
@@ -752,13 +767,13 @@ class Byd3DCard extends HTMLElement {
           position: relative;
           border-radius: 20px;
           overflow: hidden;
-          min-height: 165px;
+          min-height: 195px;
           background: #0b1119;
           border: 1px solid rgba(255,255,255,.12);
         }
         .car-image {
           width: 100%;
-          height: 190px;
+          height: 220px;
           object-fit: cover;
           display: block;
           filter: saturate(1.08) contrast(1.03);
@@ -767,46 +782,30 @@ class Byd3DCard extends HTMLElement {
           position: absolute;
           inset: 0;
           display: flex;
-          flex-direction: column;
-          justify-content: space-between;
+          justify-content: flex-end;
           padding: 14px;
           background: linear-gradient(180deg, rgba(5,7,10,.12), rgba(5,7,10,.72));
-        }
-        .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-        .title { font-size: 22px; font-weight: 800; text-shadow: 0 2px 12px rgba(0,0,0,.65); }
-        .chip {
-          font-size: 11px;
-          font-weight: 700;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: rgba(0,0,0,.45);
-          border: 1px solid rgba(255,255,255,.16);
-          letter-spacing: .3px;
-        }
-        .hero-range {
-          align-self: flex-start;
-          font-size: 16px;
-          font-weight: 800;
-          color: rgba(255,255,255,.95);
-          padding: 6px 11px;
-          border-radius: 999px;
-          background: rgba(0,0,0,.38);
-          border: 1px solid rgba(255,255,255,.15);
-          text-shadow: 0 1px 8px rgba(0,0,0,.55);
         }
         .panel {
           border-radius: 20px;
           padding: 14px;
-          background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
-          border: 1px solid rgba(255,255,255,.12);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -12px 22px rgba(0,0,0,.46);
+          background:
+            radial-gradient(circle at 85% 20%, rgba(93, 210, 255, .18), transparent 36%),
+            radial-gradient(circle at 16% 60%, rgba(53, 137, 255, .14), transparent 35%),
+            linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.03));
+          border: 1px solid rgba(160, 188, 214, .26);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.16),
+            inset 0 -20px 28px rgba(0,0,0,.42);
         }
         .category {
           margin-top: 12px;
           border-radius: 18px;
           padding: 10px;
-          border: 1px solid rgba(255,255,255,.11);
-          background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+          border: 1px solid rgba(160, 188, 214, .22);
+          background:
+            radial-gradient(circle at 24% 10%, rgba(58,120,188,.2), transparent 33%),
+            linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
         }
         .category h3 {
           margin: 2px 2px 10px;
@@ -815,8 +814,17 @@ class Byd3DCard extends HTMLElement {
           letter-spacing: 1.1px;
           color: rgba(255,255,255,.8);
         }
+        .category h3.category-title-main {
+          text-transform: none;
+          letter-spacing: .2px;
+          font-size: 24px;
+          font-weight: 900;
+          color: #f2f8ff;
+          text-shadow: 0 2px 12px rgba(0,0,0,.35);
+          text-align: center;
+        }
         .battery-head { display: flex; align-items: center; margin-bottom: 8px; }
-        .battery-head span { font-size: 12px; color: rgba(255,255,255,.72); letter-spacing: .8px; }
+        .battery-head span { font-size: 12px; color: rgba(230,242,255,.74); letter-spacing: .8px; }
         .battery-row {
           display: flex;
           align-items: center;
@@ -828,15 +836,21 @@ class Byd3DCard extends HTMLElement {
           height: 30px;
           border-radius: 999px;
           overflow: hidden;
-          background: linear-gradient(180deg, #07090d, #252d36);
-          border: 1px solid rgba(255,255,255,.20);
-          box-shadow: inset 0 4px 7px rgba(255,255,255,.12), inset 0 -10px 18px rgba(0,0,0,.65);
+          background: linear-gradient(180deg, #0a0f17, #1a2430);
+          border: 1px solid rgba(188,214,236,.24);
+          box-shadow:
+            inset 0 4px 8px rgba(255,255,255,.14),
+            inset 0 -12px 16px rgba(0,0,0,.72),
+            0 0 0 1px rgba(54,118,170,.18);
         }
         .battery-fill {
           height: 100%;
           border-radius: 999px;
-          background: linear-gradient(90deg, #00d9ff, #00ff9d);
-          box-shadow: inset 0 2px 8px rgba(255,255,255,.45), 0 0 26px rgba(0,255,190,.55);
+          background: linear-gradient(90deg, #6dd9ff 0%, #63d7d3 48%, #78f3b8 100%);
+          box-shadow:
+            inset 0 2px 8px rgba(255,255,255,.46),
+            0 0 24px rgba(121,239,193,.4),
+            0 0 22px rgba(105,204,255,.35);
           transition: width .6s ease;
           position: relative;
           overflow: hidden;
@@ -867,7 +881,7 @@ class Byd3DCard extends HTMLElement {
           right: 4px;
           height: 45%;
           border-radius: 999px;
-          background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0));
+          background: linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,0));
         }
         .battery-percent {
           min-width: 70px;
@@ -875,10 +889,41 @@ class Byd3DCard extends HTMLElement {
           font-size: 34px;
           font-weight: 900;
           line-height: 1;
-          color: #fff;
-          text-shadow: 0 0 20px rgba(0,229,255,.75);
+          color: #f8feff;
+          text-shadow:
+            0 0 18px rgba(120,220,255,.75),
+            0 0 34px rgba(81,187,255,.5);
         }
-        .battery-sub { margin-top: 8px; color: rgba(255,255,255,.7); font-size: 13px; }
+        .battery-side {
+          min-width: 85px;
+          text-align: right;
+          padding: 6px 9px;
+          border-radius: 12px;
+          background: linear-gradient(180deg, rgba(120,220,255,.14), rgba(120,220,255,.02));
+          border: 1px solid rgba(120,220,255,.24);
+        }
+        .battery-range {
+          margin-top: 2px;
+          font-size: 17px;
+          font-weight: 800;
+          color: rgba(218,242,255,.92);
+          white-space: nowrap;
+        }
+        .battery-sub {
+          margin-top: 9px;
+          color: rgba(226,239,252,.92);
+          font-size: 17px;
+          font-weight: 700;
+          text-align: center;
+        }
+        .battery-sub .power-value {
+          display: inline-block;
+          direction: ltr;
+          unicode-bidi: bidi-override;
+          font-weight: 800;
+          color: #f2fbff;
+          margin-inline-start: 2px;
+        }
         .metrics-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1057,10 +1102,13 @@ class Byd3DCard extends HTMLElement {
         @keyframes charge-wave { 0% { left: -40%; opacity: .2; } 35% { opacity: 1; } 100% { left: 100%; opacity: .3; } }
         @keyframes blink { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
         @media (max-width: 540px) {
-          .title { font-size: 19px; }
-          .car-image { height: 170px; }
-          .hero { min-height: 150px; }
+          .car-image { height: 190px; }
+          .hero { min-height: 165px; }
+          .category h3.category-title-main { font-size: 21px; }
           .battery-percent { font-size: 30px; min-width: 60px; }
+          .battery-side { min-width: 72px; }
+          .battery-range { font-size: 15px; }
+          .battery-sub { font-size: 15px; }
           .seat-grid { grid-template-columns: 1fr; }
           .climate-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
