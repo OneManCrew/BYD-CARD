@@ -1,48 +1,46 @@
 # BYD 3D Card
 
-כרטיס Lovelace מתקדם ל-Home Assistant עבור רכבי BYD, עם עיצוב תלת מימדי, פרופילי רכב, תרגום רב-שפתי ותצוגת קטגוריות דינמית.
+Advanced Home Assistant Lovelace card for BYD vehicles with a 3D-style UI, multi-language support, vehicle profiles, and category-based controls.
 
-## מה הכרטיס כולל
+## Important prerequisite (required)
 
-- עיצוב 3D מודרני עם Hero לרכב ומצב סוללה
-- בחירת פרופיל רכב: `ATTO 3`, `SEAL`, `DOLPHIN`, `SEALION 7`
-- מיפוי אוטומטי לפי `entity_prefix`
-- קטגוריות בלחצני Radio:
+This card **requires** the BYD integration below.  
+Without it, the BYD entities do not exist, and the card cannot show data or control the vehicle:
+
+- https://github.com/jkaberg/hass-byd-vehicle
+
+Recommended order:
+1. Install `hass-byd-vehicle`.
+2. Verify BYD entities are available in Home Assistant.
+3. Install and use `BYD 3D Card`.
+
+## Features
+
+- 3D hero layout for vehicle image and battery status
+- Vehicle profiles: `ATTO 3`, `SEAL`, `DOLPHIN`, `SEALION 7`
+- Auto entity mapping via `entity_prefix`
+- Category tabs (radio style):
   - `Summary`
   - `Climate`
   - `Vehicle`
   - `Tires`
   - `Location`
   - `Quick actions`
-- סידור קטגוריות ב-Drag & Drop מתוך UI Editor
-- שימור הקטגוריה האחרונה אחרי רענון
-- תמיכה בשפות: עברית, אנגלית, רוסית, צרפתית
-- תמונות פרופיל מקומיות מתיקיית `pic/`
+- Drag & drop category order in UI editor
+- Last selected category is remembered after refresh
+- Languages: Hebrew, English, Russian, French
+- Local profile images from `pic/`
 
-## התקנה
+## Install
 
-### דרישת חובה לפני הכל
-
-הכרטיס הזה **חייב** את האינטגרציה של BYD כדי לעבוד.
-
-יש להתקין קודם את:
-- https://github.com/jkaberg/hass-byd-vehicle
-
-ללא האינטגרציה הזו לא ייווצרו ה-entities של הרכב, ולכן הכרטיס לא יוכל להציג נתונים או להפעיל פעולות.
-
-סדר ההתקנה המומלץ:
-1. התקנת אינטגרציית BYD מהקישור למעלה
-2. וידוא שה-entities של הרכב מופיעים ב-Home Assistant
-3. התקנת הכרטיס `BYD 3D Card`
-
-1. העתק את התיקייה לרכיב `www`:
+1. Copy this repository folder to Home Assistant:
    - `/config/www/byd-card/`
-2. הוסף Resource:
+2. Add Lovelace resource:
    - URL: `/local/byd-card/byd-3d-card.js`
    - Type: `module`
-3. בצע Hard Refresh לדפדפן.
+3. Hard refresh the browser/app.
 
-## YAML בסיסי
+## Basic YAML
 
 ```yaml
 type: custom:byd-3d-card
@@ -51,7 +49,7 @@ title: Moshiko BYD ATTO 3
 title_font_size: 46
 entity_prefix: byd_atto_3
 image_base_path: /local/byd-card/pic
-language: he
+language: en
 i18n_base_path: /local/byd-card/i18n
 show_climate: true
 show_vehicle: true
@@ -61,48 +59,55 @@ show_location: true
 refresh_interval_seconds: 25
 ```
 
-## מבנה קבצים
+## Files
 
-- `byd-3d-card.js` - קובץ הכרטיס הראשי
-- `i18n/*.json` - קבצי תרגום
-- `pic/` - תמונות פרופיל רכבים
+- `byd-3d-card.js` - main custom card file
+- `i18n/*.json` - language files
+- `pic/` - profile images
 
-## תמונות פרופיל (עם הסבר על כל תמונה)
+## Profile images (in this repo)
 
-- `pic/bydatoo3.png`
-  - תמונת פרופיל לרכב BYD ATTO 3, מופיעה בכרטיס וב-UI Editor.
-- `pic/byd_dolphin.png`
-  - תמונת פרופיל לרכב BYD DOLPHIN.
-- `pic/seal.png`
-  - תמונת פרופיל לרכב BYD SEAL (קובץ המקור שהוגדר לפרופיל Seal).
-- `pic/sealion.png`
-  - תמונת פרופיל לרכב BYD SEALION 7 (קובץ המקור שהוגדר לפרופיל Sealion 7).
-- `pic/byd_seal.png`
-  - גרסה מותאמת מידה (450x273) לשימוש אחיד בתצוגות.
-- `pic/byd_sealion7.png`
-  - גרסה מותאמת מידה (450x273) לשימוש אחיד בתצוגות.
+- `pic/bydatoo3.png` - BYD ATTO 3 profile image
+- `pic/byd_dolphin.png` - BYD DOLPHIN profile image
+- `pic/seal.png` - BYD SEAL source profile image
+- `pic/sealion.png` - BYD SEALION 7 source profile image
+- `pic/byd_seal.png` - resized SEAL variant (450x273)
+- `pic/byd_sealion7.png` - resized SEALION 7 variant (450x273)
 
-## הסבר על סט תמונות הממשק (כמו בצילומי המסך)
+### Preview
 
-1. `Summary view` (דו-שפתי):
-   - מציג Hero, תג מצב סוללה, פס התראות, טאבי קטגוריות וכרטיס סיכום.
-2. `Climate view`:
-   - מציג מדדי אקלים, לחצני שליטה במזגן, מצבי קירור/חימום ושליטת חימום מושבים.
-3. `Vehicle view`:
-   - מציג סטטוס דלתות, חלונות, נעילה, אונליין, מהירות וקילומטראז׳.
-4. `Quick actions view`:
-   - פעולות מהירות: נעילה/פתיחה, מזגן, חימום סוללה, הבהוב אורות, מצא רכב, סגירת חלונות.
-5. `Tires view`:
-   - מציג לחץ אוויר לכל גלגל עם צבע התראה לפי ערך PSI.
-6. `Editor full configuration`:
-   - מסך העריכה המלא, כולל פרופיל, שפה, כותרת, גודל כותרת, נתיבי תמונות/שפה וקטגוריות.
-7. `Editor categories and order`:
-   - תצוגת צ׳קבוקסים להפעלה/כיבוי קטגוריות וסדר קטגוריות ב-Drag & Drop.
+| ATTO 3 | DOLPHIN |
+|---|---|
+| ![ATTO 3](pic/bydatoo3.png) | ![DOLPHIN](pic/byd_dolphin.png) |
 
-## הערות
+| SEAL | SEALION 7 |
+|---|---|
+| ![SEAL](pic/seal.png) | ![SEALION 7](pic/sealion.png) |
 
-- `entity_prefix` לדוגמה:
-  - עבור `sensor.byd_atto_3_battery_level` הערך הוא `byd_atto_3`.
-- קבצי שפה נטענים מתוך:
+## UI screenshots
+
+The dashboard screenshots you sent are not in the repository yet as image files, so they cannot be rendered in README right now.
+
+Add them into:
+
+- `docs/screenshots/`
+
+Suggested names:
+
+- `docs/screenshots/01-summary.png`
+- `docs/screenshots/02-climate.png`
+- `docs/screenshots/03-vehicle.png`
+- `docs/screenshots/04-actions.png`
+- `docs/screenshots/05-tires.png`
+- `docs/screenshots/06-editor-full.png`
+- `docs/screenshots/07-editor-categories.png`
+
+Then they can be embedded directly in this README.
+
+## Notes
+
+- `entity_prefix` example:
+  - For `sensor.byd_atto_3_battery_level`, use `byd_atto_3`.
+- Language files are loaded from:
   - `i18n_base_path/<language>.json`
-- אם תמונה מקומית לא נמצאת, הכרטיס נופל אוטומטית ל-SVG פנימי.
+- If local profile image is missing, the card falls back to built-in SVG.
