@@ -52,6 +52,8 @@
   "settings_title": "BYD 3D Card",
   "settings_hint": "Выберите профиль, язык и видимые категории.",
   "settings_card_title": "Заголовок карточки",
+  "settings_title_font_size": "Размер заголовка (px)",
+  "settings_title_font_size_hint": "Управляет размером текста заголовка автомобиля в верхней части карточки",
   "settings_prefix": "Префикс сущности",
   "settings_prefix_help": "Пример: byd_atto_3 для sensor.byd_atto_3_battery_level",
   "settings_image_url": "Изображение авто (опционально)",

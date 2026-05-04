@@ -52,6 +52,8 @@
   "settings_title": "BYD 3D Card",
   "settings_hint": "Pick a vehicle profile, language and visible categories.",
   "settings_card_title": "Card title",
+  "settings_title_font_size": "Title size (px)",
+  "settings_title_font_size_hint": "Controls the vehicle title text size at the top of the card",
   "settings_prefix": "Entity Prefix",
   "settings_prefix_help": "Example: byd_atto_3 for sensor.byd_atto_3_battery_level",
   "settings_image_url": "Vehicle image (optional)",

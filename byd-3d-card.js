@@ -136,6 +136,13 @@ const VEHICLE_PROFILES = {
   },
 };
 
+const PROFILE_DEFAULTS = {
+  atto3: { title: "BYD ATTO 3", entity_prefix: "byd_atto_3" },
+  seal: { title: "BYD SEAL", entity_prefix: "byd_seal" },
+  dolphin: { title: "BYD DOLPHIN", entity_prefix: "byd_dolphin" },
+  sealion7: { title: "BYD SEALION 7", entity_prefix: "byd_sealion_7" },
+};
+
 const ENTITY_HINTS = {
   battery: { domains: ["sensor"], suffixes: ["battery_level", "elec_percent"] },
   range: { domains: ["sensor"], suffixes: ["range", "endurance_mileage", "endurance_mileage_v2"] },
@@ -182,6 +189,7 @@ const DEFAULT_CONFIG = {
   type: `custom:${CARD_TYPE}`,
   vehicle_profile: "atto3",
   title: "BYD",
+  title_font_size: 46,
   entity_prefix: "",
   image_url: "",
   image_base_path: "/local/byd-card/pic",
@@ -243,6 +251,7 @@ const FALLBACK_I18N = {
   flash_lights: "הבהוב אורות",
   find_car: "מצא רכב",
   close_windows: "סגור חלונות",
+  open_map: "פתח מפה",
   seat_heating: "חימום מושבים",
   seat_driver: "נהג",
   seat_passenger: "נוסע",
@@ -261,6 +270,8 @@ const FALLBACK_I18N = {
   settings_title: "BYD 3D Card",
   settings_hint: "בחר פרופיל רכב, שפה וקטגוריות תצוגה.",
   settings_card_title: "כותרת",
+  settings_title_font_size: "גודל כותרת (פיקסלים)",
+  settings_title_font_size_hint: "שליטה בגודל הטקסט של כותרת הרכב בראש הכרטיס",
   settings_prefix: "קידומת ישות",
   settings_prefix_help: "לדוגמה: byd_atto_3 עבור sensor.byd_atto_3_battery_level",
   settings_image_url: "תמונת רכב (אופציונלי)",
@@ -303,6 +314,85 @@ const FALLBACK_I18N = {
   aria_vehicle_categories: "קטגוריות רכב",
 };
 
+const ALERT_I18N = {
+  he: {
+    alert_header: "התראת רכב",
+    alert_header_single: "התראה ברכב",
+    alert_tire_pressure_low: "לחץ אוויר נמוך",
+    alert_tire_pressure_critical: "לחץ אוויר קריטי",
+    alert_system_fault: "תקלה במערכת",
+    front_left: "קדמי שמאל",
+    front_right: "קדמי ימין",
+    rear_left: "אחורי שמאל",
+    rear_right: "אחורי ימין",
+    rapid_tire_leak: "דליפת אוויר מהירה",
+    alert_tpms: "TPMS",
+    alert_abs: "ABS",
+    alert_brake: "בלם",
+    alert_steering: "הגה",
+    alert_charging: "טעינה",
+    alert_srs: "SRS",
+    alert_svs: "SVS",
+  },
+  en: {
+    alert_header: "Vehicle alert",
+    alert_header_single: "Alert in vehicle",
+    alert_tire_pressure_low: "Low tire pressure",
+    alert_tire_pressure_critical: "Critical tire pressure",
+    alert_system_fault: "System fault",
+    front_left: "Front left",
+    front_right: "Front right",
+    rear_left: "Rear left",
+    rear_right: "Rear right",
+    rapid_tire_leak: "Rapid tire leak",
+    alert_tpms: "TPMS",
+    alert_abs: "ABS",
+    alert_brake: "Brake",
+    alert_steering: "Steering",
+    alert_charging: "Charging",
+    alert_srs: "SRS",
+    alert_svs: "SVS",
+  },
+  ru: {
+    alert_header: "Предупреждение авто",
+    alert_header_single: "Предупреждение в авто",
+    alert_tire_pressure_low: "Низкое давление в шине",
+    alert_tire_pressure_critical: "Критическое давление в шине",
+    alert_system_fault: "Системная ошибка",
+    front_left: "Передняя левая",
+    front_right: "Передняя правая",
+    rear_left: "Задняя левая",
+    rear_right: "Задняя правая",
+    rapid_tire_leak: "Быстрая утечка в шине",
+    alert_tpms: "TPMS",
+    alert_abs: "ABS",
+    alert_brake: "Тормоза",
+    alert_steering: "Рулевое",
+    alert_charging: "Зарядка",
+    alert_srs: "SRS",
+    alert_svs: "SVS",
+  },
+  fr: {
+    alert_header: "Alerte véhicule",
+    alert_header_single: "Alerte dans le véhicule",
+    alert_tire_pressure_low: "Pression pneu faible",
+    alert_tire_pressure_critical: "Pression pneu critique",
+    alert_system_fault: "Défaut système",
+    front_left: "Avant gauche",
+    front_right: "Avant droite",
+    rear_left: "Arrière gauche",
+    rear_right: "Arrière droite",
+    rapid_tire_leak: "Fuite rapide du pneu",
+    alert_tpms: "TPMS",
+    alert_abs: "ABS",
+    alert_brake: "Freinage",
+    alert_steering: "Direction",
+    alert_charging: "Charge",
+    alert_srs: "SRS",
+    alert_svs: "SVS",
+  },
+};
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -338,9 +428,11 @@ class Byd3DCard extends HTMLElement {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
+    this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+    this._lastRenderSnapshot = "";
     this._restartAutoRefreshLoop();
     const storedCategory = this._loadStoredCategory();
     this._activeCategory = storedCategory || this._activeCategory || "summary";
@@ -445,6 +537,12 @@ class Byd3DCard extends HTMLElement {
     return clamp(Math.round(n), 8, 120);
   }
 
+  _normalizeTitleFontSize(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 46;
+    return clamp(Math.round(n), 24, 72);
+  }
+
   _getAutoRefreshIntervalMs() {
     const seconds = this._normalizeRefreshInterval(this._config?.refresh_interval_seconds);
     return seconds * 1000;
@@ -498,6 +596,10 @@ class Byd3DCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._config) return;
+    const nextSnapshot = this._buildRenderSnapshot();
+    if (nextSnapshot === this._lastRenderSnapshot) return;
+    this._lastRenderSnapshot = nextSnapshot;
     this._render();
   }
 
@@ -517,9 +619,74 @@ class Byd3DCard extends HTMLElement {
     return { rows: 8, columns: 12, min_rows: 6 };
   }
 
+  _snapshotStateValue(logicalKey) {
+    const eid = this._resolveEntity(logicalKey);
+    if (!eid || !this._hass?.states?.[eid]) return `${logicalKey}:na`;
+    const state = this._hass.states[eid];
+    const attrs = state.attributes || {};
+
+    if (logicalKey === "climate") {
+      return `${logicalKey}:${state.state}|${attrs.temperature ?? ""}|${attrs.min_temp ?? ""}|${attrs.max_temp ?? ""}|${attrs.preset_mode ?? ""}|${attrs.hvac_mode ?? ""}`;
+    }
+    if (logicalKey === "location") {
+      return `${logicalKey}:${state.state}|${attrs.latitude ?? ""}|${attrs.longitude ?? ""}|${attrs.gps_speed ?? ""}`;
+    }
+    if (logicalKey === "battery_power") {
+      return `${logicalKey}:${state.state}|${attrs.unit_of_measurement ?? ""}`;
+    }
+    return `${logicalKey}:${state.state}`;
+  }
+
+  _buildRenderSnapshot() {
+    if (!this._hass || !this._config) return "no-data";
+    const keys = [
+      "battery",
+      "range",
+      "charging",
+      "battery_power",
+      "cabin_temp",
+      "exterior_temp",
+      "speed",
+      "odometer",
+      "doors",
+      "windows",
+      "lock",
+      "online",
+      "climate",
+      "ac_switch",
+      "battery_heat",
+      "driver_seat_heat",
+      "passenger_seat_heat",
+      "rear_left_seat_heat",
+      "rear_right_seat_heat",
+      "tire_fl",
+      "tire_fr",
+      "tire_rl",
+      "tire_rr",
+      "location",
+      "tirepressure_system",
+      "rapid_tire_leak",
+      "left_front_tire_status",
+      "right_front_tire_status",
+      "left_rear_tire_status",
+      "right_rear_tire_status",
+      "abs_warning",
+      "braking_system",
+      "steering_system",
+      "charging_system",
+      "srs",
+      "svs",
+    ];
+
+    const values = keys.map((key) => this._snapshotStateValue(key));
+    values.push(`lang:${this._language()}`);
+    values.push(`cat:${this._activeCategory || "summary"}`);
+    return values.join("||");
+  }
+
   _resolvePrefix() {
     if (this._config.entity_prefix) return this._config.entity_prefix;
-    if (!this._hass) return "";
+    if (!this._hass || !this._hass.states || typeof this._hass.states !== "object") return "";
     const states = Object.keys(this._hass.states);
     const probe = states.find((eid) => /^sensor\..+_(battery_level|elec_percent)$/.test(eid));
     if (!probe) return "";
@@ -531,7 +698,7 @@ class Byd3DCard extends HTMLElement {
   _resolveEntity(logicalKey) {
     const override = this._config.entities?.[logicalKey];
     if (override) return override;
-    if (!this._hass) return null;
+    if (!this._hass || !this._hass.states || typeof this._hass.states !== "object") return null;
 
     const hint = ENTITY_HINTS[logicalKey];
     if (!hint) return null;
@@ -563,7 +730,9 @@ class Byd3DCard extends HTMLElement {
     const basePath = (this._config.image_base_path || "/local/byd-card/pic").replace(/\/$/, "");
     const localMap = {
       atto3: `${basePath}/bydatoo3.png`,
+      seal: `${basePath}/seal.png`,
       dolphin: `${basePath}/byd_dolphin.png`,
+      sealion7: `${basePath}/sealion.png`,
     };
     return localMap[profileKey] || null;
   }
@@ -574,6 +743,11 @@ class Byd3DCard extends HTMLElement {
 
   _t(key) {
     return this._translations?.[key] || FALLBACK_I18N[key] || key;
+  }
+
+  _ta(key) {
+    const lang = this._language();
+    return ALERT_I18N[lang]?.[key] || this._translations?.[key] || FALLBACK_I18N[key] || key;
   }
 
   _boolLabel(state) {
@@ -768,6 +942,18 @@ class Byd3DCard extends HTMLElement {
     this._schedulePostActionRefresh();
   }
 
+  _openMoreInfo(logicalKey) {
+    const eid = this._resolveEntity(logicalKey);
+    if (!eid) return;
+    this.dispatchEvent(
+      new CustomEvent("hass-more-info", {
+        detail: { entityId: eid },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   _callSelectOption(logicalKey, option) {
     const eid = this._resolveEntity(logicalKey);
     if (!eid || !this._hass) return;
@@ -912,6 +1098,7 @@ class Byd3DCard extends HTMLElement {
 
     const profile = VEHICLE_PROFILES[this._config.vehicle_profile] || VEHICLE_PROFILES.atto3;
     const title = this._config.title || profile.label;
+    const titleFontSize = this._normalizeTitleFontSize(this._config.title_font_size);
     const imageUrl = this._config.image_url || this._profileImage(this._config.vehicle_profile) || profile.image;
 
     const batteryState = this._state("battery");
@@ -959,6 +1146,19 @@ class Byd3DCard extends HTMLElement {
     const climateMax = toNumber(climateState?.attributes?.max_temp) ?? 31;
     const climateTemp = climateTempRaw ?? 21;
     const presetMode = String(climateState?.attributes?.preset_mode || "").toLowerCase();
+    const hvacAction = String(climateState?.attributes?.hvac_action || "").toLowerCase();
+    const hvacMode = String(climateState?.attributes?.hvac_mode || climateState?.state || "").toLowerCase();
+    const climateVisualMode = (() => {
+      const coolHints = ["cool", "cooling", "max_cool"];
+      const heatHints = ["heat", "heating", "max_heat"];
+      if (coolHints.some((hint) => hvacAction.includes(hint))) return "cool";
+      if (heatHints.some((hint) => hvacAction.includes(hint))) return "heat";
+      if (coolHints.some((hint) => presetMode.includes(hint))) return "cool";
+      if (heatHints.some((hint) => presetMode.includes(hint))) return "heat";
+      if (coolHints.some((hint) => hvacMode.includes(hint))) return "cool";
+      if (heatHints.some((hint) => hvacMode.includes(hint))) return "heat";
+      return "cool";
+    })();
     const seatKeys = ["driver_seat_heat", "passenger_seat_heat", "rear_left_seat_heat", "rear_right_seat_heat"];
     const seatHeatStates = seatKeys
       .map((key) => {
@@ -991,7 +1191,7 @@ class Byd3DCard extends HTMLElement {
       ? `<span class="charging-label"><span class="charging-icon">⚡</span><span class="charging-text">${this._t("charging_active")}</span></span>`
       : this._t("battery_status");
     const powerMarkup = `<span class="power-pair"><span class="power-value">${powerDisplay}</span></span>`;
-    const idleInBarMarkup = !isCharging ? `<div class="battery-inline-state">${this._t("not_charging")}</div>` : "";
+    const idleInBarMarkup = "";
 
     const tireKeys = [
       ["tire_fl", this._t("front_left")],
@@ -1022,8 +1222,8 @@ class Byd3DCard extends HTMLElement {
     };
     const tireWarn = (label, psi) => {
       if (psi === null) return;
-      if (psi < 28) addAlert(`${this._t("alert_tire_pressure_critical")} - ${label}`);
-      else if (psi < 30) addAlert(`${this._t("alert_tire_pressure_low")} - ${label}`);
+      if (psi < 28) addAlert(`${this._ta("alert_tire_pressure_critical")} - ${label}`);
+      else if (psi < 30) addAlert(`${this._ta("alert_tire_pressure_low")} - ${label}`);
     };
 
     const flPsi = (() => {
@@ -1047,24 +1247,24 @@ class Byd3DCard extends HTMLElement {
       return kpa === null ? null : kpa * 0.145038;
     })();
 
-    tireWarn(this._t("front_left"), flPsi);
-    tireWarn(this._t("front_right"), frPsi);
-    tireWarn(this._t("rear_left"), rlPsi);
-    tireWarn(this._t("rear_right"), rrPsi);
+    tireWarn(this._ta("front_left"), flPsi);
+    tireWarn(this._ta("front_right"), frPsi);
+    tireWarn(this._ta("rear_left"), rlPsi);
+    tireWarn(this._ta("rear_right"), rrPsi);
 
     const boolFaultState = (s) => s?.state === "on";
-    if (boolFaultState(rapidTireLeakState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rapid_tire_leak")}`);
-    if (boolFaultState(tirepressureSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_tpms")}`);
-    if (boolFaultState(lfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_left")}`);
-    if (boolFaultState(rfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_right")}`);
-    if (boolFaultState(lrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_left")}`);
-    if (boolFaultState(rrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_right")}`);
-    if (boolFaultState(absWarningState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_abs")}`);
-    if (boolFaultState(brakingSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_brake")}`);
-    if (boolFaultState(steeringSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_steering")}`);
-    if (boolFaultState(chargingSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_charging")}`);
-    if (boolFaultState(srsState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_srs")}`);
-    if (boolFaultState(svsState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_svs")}`);
+    if (boolFaultState(rapidTireLeakState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("rapid_tire_leak")}`);
+    if (boolFaultState(tirepressureSystemState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_tpms")}`);
+    if (boolFaultState(lfTireStatusState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("front_left")}`);
+    if (boolFaultState(rfTireStatusState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("front_right")}`);
+    if (boolFaultState(lrTireStatusState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("rear_left")}`);
+    if (boolFaultState(rrTireStatusState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("rear_right")}`);
+    if (boolFaultState(absWarningState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_abs")}`);
+    if (boolFaultState(brakingSystemState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_brake")}`);
+    if (boolFaultState(steeringSystemState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_steering")}`);
+    if (boolFaultState(chargingSystemState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_charging")}`);
+    if (boolFaultState(srsState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_srs")}`);
+    if (boolFaultState(svsState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("alert_svs")}`);
 
     const alertJoined = alerts.map((msg) => `⚠ ${msg}`).join("   •   ");
     const alertRibbon = alerts.length
@@ -1076,7 +1276,7 @@ class Byd3DCard extends HTMLElement {
                 ? `
             <div class="alert-ribbon-head">
               <span class="alert-ribbon-sign">⚠</span>
-              <span>${this._t("alert_header")}</span>
+              <span>${this._ta("alert_header")}</span>
             </div>
             <div class="alert-ribbon-body">
                 <div class="alert-marquee">
@@ -1091,7 +1291,7 @@ class Byd3DCard extends HTMLElement {
               <div class="alert-single">⚠ ${alerts[0]}</div>
             </div>
             <div class="alert-ribbon-head">
-              <span>${this._t("alert_header_single")}</span>
+              <span>${this._ta("alert_header_single")}</span>
               <span class="alert-ribbon-sign">⚠</span>
             </div>
               `
@@ -1114,7 +1314,10 @@ class Byd3DCard extends HTMLElement {
     );
     const canCloseWindows = Boolean(this._resolveEntity("close_windows"));
     const canToggleLock = Boolean(this._resolveEntity("lock"));
-    if (climateIndicatorIsOn) pushIndicator("climate", "mdi:air-conditioner", this._t("ac"), "cold", canControlClimate);
+    if (climateIndicatorIsOn) {
+      const climateTone = climateVisualMode === "heat" ? "heat" : "cold";
+      pushIndicator("climate", "mdi:air-conditioner", this._t("ac"), climateTone, canControlClimate);
+    }
     if (batteryHeatState?.state === "on") {
       pushIndicator("battery_heat", "mdi:heat-wave", this._t("battery_heat"), "hot", canToggleBatteryHeat);
     }
@@ -1182,9 +1385,9 @@ class Byd3DCard extends HTMLElement {
       <div class="panel">
         <div class="battery-head">
           <span class="battery-head-power">${powerMarkup}</span>
+          <span class="battery-head-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</span>
           <span class="battery-head-status">${chargingHeadLabel}</span>
         </div>
-        <div class="battery-range-top">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
         <div class="battery-row">
           <div class="battery-shell ${isCharging ? "is-charging" : ""}">
             <div class="battery-fill ${isCharging ? "charging" : ""}" style="width:${battery}%"></div>
@@ -1204,28 +1407,33 @@ class Byd3DCard extends HTMLElement {
       ? this._category(
           this._t("category_climate"),
           `
-            <div class="metrics-grid">
+            <div class="metrics-grid climate-metrics">
               ${this._metric(this._t("ac"), this._boolLabel(climateState?.state))}
               ${this._metric(this._t("battery_heat"), this._boolLabel(batteryHeatState?.state))}
               ${this._metric(this._t("interior_temp"), `${cabinTempState?.state ?? "-"}°C`)}
               ${this._metric(this._t("exterior_temp"), `${exteriorTempState?.state ?? "-"}°C`)}
             </div>
             <div class="climate-controls">
-              <div class="climate-row">
+              <div class="climate-row climate-row-3">
                 <button class="climate-btn ${climateIsOn ? "on" : ""}" data-climate-action="power">
                   ${climateIsOn ? this._t("turn_off") : this._t("turn_on")}
                 </button>
+                <button class="climate-btn" data-climate-action="temp_down">-</button>
+                <button class="climate-btn" data-climate-action="temp_up">+</button>
+              </div>
+              <div class="climate-row climate-row-3">
+                <button class="climate-btn ${presetMode === "max_cool" ? "active-cool" : ""}" data-climate-action="preset_cool">${this._t("max_cool")}</button>
+                <button class="climate-btn ${presetMode === "max_heat" ? "active-heat" : ""}" data-climate-action="preset_heat">${this._t("max_heat")}</button>
+                <button class="climate-btn" data-climate-action="comfort_21">${this._t("comfort_21")}</button>
+              </div>
+              <div class="climate-row climate-row-2">
                 <div class="target-box">
                   <span>${this._t("target_temp")}</span>
                   <strong>${climateTemp.toFixed(0)}°C</strong>
                 </div>
-              </div>
-              <div class="climate-row">
-                <button class="climate-btn" data-climate-action="temp_down">-</button>
-                <button class="climate-btn" data-climate-action="temp_up">+</button>
-                <button class="climate-btn ${presetMode === "max_cool" ? "active-cool" : ""}" data-climate-action="preset_cool">${this._t("max_cool")}</button>
-                <button class="climate-btn ${presetMode === "max_heat" ? "active-heat" : ""}" data-climate-action="preset_heat">${this._t("max_heat")}</button>
-                <button class="climate-btn" data-climate-action="comfort_21">${this._t("comfort_21")}</button>
+                <button class="climate-btn climate-btn-temp" disabled>
+                  ${climateTemp.toFixed(0)}°C
+                </button>
               </div>
             </div>
             ${
@@ -1246,7 +1454,7 @@ class Byd3DCard extends HTMLElement {
       ? this._category(
           this._t("category_vehicle"),
           `
-              <div class="metrics-grid">
+              <div class="metrics-grid vehicle-metrics">
               ${this._metric(this._t("doors"), this._openClosedLabel(doorsState?.state))}
               ${this._metric(this._t("windows"), this._openClosedLabel(windowsState?.state))}
               ${this._metric(this._t("lock"), this._boolLabel(lockState?.state))}
@@ -1267,6 +1475,7 @@ class Byd3DCard extends HTMLElement {
     const unlockActive = lockState?.state === "unlocked" || lockState?.state === "on";
     const climateOnActive = climateIsOn;
     const climateOffActive = !climateIsOn;
+    const climateModeClass = climateVisualMode === "heat" ? "climate-mode-heat" : "climate-mode-cool";
     const actionsCategory = this._config.show_actions
       ? this._category(
           this._t("category_actions"),
@@ -1274,7 +1483,7 @@ class Byd3DCard extends HTMLElement {
             <div class="actions">
               ${this._renderActionButton("lock", this._getButtonText("lock", this._t("lock")), "mdi:lock", "lock", lockActive)}
               ${this._renderActionButton("lock", this._getButtonText("unlock", this._t("unlock")), "mdi:lock-open-variant-outline", "unlock", unlockActive)}
-              ${this._renderActionButton("climate", this._getButtonText("climate_on", this._t("ac")), "mdi:air-conditioner", "climate_on", climateOnActive, "climate-on")}
+              ${this._renderActionButton("climate", this._getButtonText("climate_on", this._t("ac")), "mdi:air-conditioner", "climate_on", climateOnActive, `climate-on ${climateModeClass}`)}
               ${this._renderActionButton("climate", this._getButtonText("climate_off", this._t("turn_off")), "mdi:air-conditioner", "climate_off", climateOffActive, "climate-off")}
               ${this._renderActionButton("battery_heat", this._getButtonText("battery_heat", this._t("battery_heat")), "mdi:heat-wave", "toggle")}
               ${this._renderActionButton("flash_lights", this._getButtonText("flash_lights", this._t("flash_lights")), "mdi:car-light-high", "press")}
@@ -1295,6 +1504,12 @@ class Byd3DCard extends HTMLElement {
                 ${this._metric(this._t("longitude"), locationState.attributes?.longitude ?? "-")}
                 ${this._metric(this._t("gps_speed"), locationState.attributes?.gps_speed ?? "-")}
                 ${this._metric(this._t("online"), this._boolLabel(onlineState?.state))}
+              </div>
+              <div class="location-actions">
+                <button class="action-btn location-map-btn" data-action="location_map" data-key="location">
+                  <ha-icon icon="mdi:map-search"></ha-icon>
+                  <span>${this._t("open_map")}</span>
+                </button>
               </div>
             `
           , { icon: "mdi:map-marker-radius" })
@@ -1335,7 +1550,7 @@ class Byd3DCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <ha-card>
-        <div class="wrap ${lowBattery ? "low" : ""}">
+        <div class="wrap ${lowBattery ? "low" : ""}" style="--byd-hero-title-size:${titleFontSize}px;">
           <div class="hero-title">${title}</div>
           <div class="hero">
             <img class="car-image" src="${imageUrl}" data-fallback="${profile.image}" alt="${profile.label}" />
@@ -1393,7 +1608,7 @@ class Byd3DCard extends HTMLElement {
         }
         .hero-title {
           margin: 2px 4px 10px;
-          font-size: clamp(30px, 5.4vw, 60px);
+          font-size: var(--byd-hero-title-size, clamp(30px, 5.4vw, 60px));
           font-weight: 900;
           line-height: 1.08;
           letter-spacing: .2px;
@@ -1507,8 +1722,12 @@ class Byd3DCard extends HTMLElement {
           transform: scale(.96);
         }
         .hero-lock-badge ha-icon {
+          display: block;
           width: 20px;
           height: 20px;
+          line-height: 1;
+          margin: 0;
+          transform: translateY(-0.5px);
           color: #fff;
         }
         .hero-service-item ha-icon {
@@ -1589,6 +1808,15 @@ class Byd3DCard extends HTMLElement {
         .hero-service-item.tone-cold {
           border-color: rgba(93,201,255,.52);
           box-shadow: 0 0 12px rgba(93,201,255,.24), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .hero-service-item.tone-heat {
+          border-color: rgba(255,102,102,.78);
+          box-shadow: 0 0 14px rgba(255,96,96,.34), inset 0 1px 0 rgba(255,255,255,.14);
+          background: linear-gradient(180deg, rgba(64,24,24,.82), rgba(26,10,10,.88));
+        }
+        .hero-service-item.tone-heat ha-icon {
+          color: #ffb8b8;
+          filter: drop-shadow(0 0 6px rgba(255,92,92,.45));
         }
         .hero-service-item.tone-hot {
           border-color: rgba(255,149,114,.54);
@@ -1689,7 +1917,7 @@ class Byd3DCard extends HTMLElement {
         }
         .panel {
           border-radius: 20px;
-          padding: 14px;
+          padding: 8px 10px 7px;
           background:
             radial-gradient(circle at 85% 20%, rgba(93, 210, 255, .18), transparent 36%),
             radial-gradient(circle at 16% 60%, rgba(53, 137, 255, .14), transparent 35%),
@@ -1725,8 +1953,8 @@ class Byd3DCard extends HTMLElement {
           align-items: center;
           justify-content: center;
           gap: 7px;
-          font-size: 12px;
-          font-weight: 800;
+          font-size: clamp(15px, 1.25vw, 18px);
+          font-weight: 900;
           cursor: pointer;
           transition: transform .12s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
           text-align: center;
@@ -1807,26 +2035,37 @@ class Byd3DCard extends HTMLElement {
           text-align: center;
         }
         .battery-head {
-          display: flex;
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
           align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          margin-bottom: 10px;
+          gap: 8px;
+          margin-bottom: 4px;
         }
         .battery-head-status {
-          font-size: 20px;
+          font-size: 17px;
           color: rgba(237,247,255,.97);
           font-weight: 900;
           letter-spacing: .2px;
-          text-align: right;
+          text-align: end;
+          justify-self: end;
+        }
+        .battery-head-range {
+          font-size: 15px;
+          font-weight: 800;
+          color: rgba(224,245,255,.94);
+          text-align: center;
+          justify-self: center;
+          line-height: 1.05;
+          white-space: nowrap;
         }
         .battery-head-power {
-          font-size: 21px;
+          font-size: 18px;
           color: rgba(216,244,255,.98);
           font-weight: 900;
           text-align: left;
           text-shadow: 0 0 16px rgba(104,216,255,.45);
           line-height: 1;
+          justify-self: start;
         }
         .battery-head-power .power-pair {
           display: inline-flex;
@@ -1851,19 +2090,20 @@ class Byd3DCard extends HTMLElement {
           text-shadow: 0 0 14px rgba(108, 219, 255, .75);
         }
         .charging-text {
-          font-size: 17px;
+          font-size: 15px;
           font-weight: 900;
           letter-spacing: .3px;
         }
         .battery-row {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
+          margin-top: 0;
         }
         .battery-shell {
           position: relative;
           flex: 1;
-          height: 30px;
+          height: 28px;
           border-radius: 999px;
           overflow: hidden;
           background: linear-gradient(180deg, #0a0f17, #1a2430);
@@ -1881,9 +2121,12 @@ class Byd3DCard extends HTMLElement {
             inset 0 2px 8px rgba(255,255,255,.46),
             0 0 24px rgba(121,239,193,.4),
             0 0 22px rgba(105,204,255,.35);
-          transition: width .6s ease;
+          transition: none;
           position: relative;
           overflow: hidden;
+        }
+        .battery-fill.charging {
+          transition: width .45s ease;
         }
         .battery-fill.charging::before {
           content: "";
@@ -1934,47 +2177,40 @@ class Byd3DCard extends HTMLElement {
           display: none !important;
         }
         .battery-percent {
-          min-width: 92px;
+          min-width: 84px;
           text-align: right;
-          font-size: 52px;
+          font-size: 46px;
           font-weight: 900;
           line-height: 1;
           color: #f8feff;
           text-shadow:
             0 0 18px rgba(120,220,255,.75),
             0 0 34px rgba(81,187,255,.5);
-        }
-        .battery-range-top {
-          margin-top: 8px;
-          margin-bottom: 8px;
-          font-size: 22px;
-          font-weight: 900;
-          color: rgba(228,247,255,.96);
-          text-align: center;
-          letter-spacing: .1px;
-          white-space: nowrap;
-          text-shadow: 0 0 16px rgba(109,210,255,.32);
+          margin-top: 0;
         }
         .battery-sub {
-          margin-top: 6px;
+          margin-top: 4px;
           color: rgba(226,239,252,.92);
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 700;
           text-align: right;
         }
         .battery-sub .charge-state {
-          font-size: 17px;
+          font-size: 15px;
           font-weight: 900;
           color: #f2fbff;
         }
         .metrics-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
+          gap: 8px;
+        }
+        .vehicle-metrics {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .metric {
           border-radius: 14px;
-          padding: 10px 11px;
+          padding: 8px 9px;
           background: rgba(255,255,255,.06);
           border: 1px solid rgba(255,255,255,.10);
           display: flex;
@@ -1984,19 +2220,38 @@ class Byd3DCard extends HTMLElement {
           text-align: center;
         }
         .metric label {
-          font-size: 12px;
+          font-size: clamp(14px, 1.2vw, 18px);
           color: rgba(255,255,255,.70);
           display: block;
           width: 100%;
           text-align: center;
+          font-weight: 700;
+          line-height: 1.05;
         }
         .metric strong {
-          font-size: 15px;
-          margin-top: 4px;
+          font-size: clamp(19px, 1.7vw, 26px);
+          margin-top: 3px;
           display: block;
           width: 100%;
           text-align: center;
           color: #fff;
+          line-height: 1.02;
+          font-weight: 900;
+        }
+        .climate-metrics {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 7px;
+        }
+        .climate-metrics .metric {
+          padding: 7px 8px;
+          min-height: 72px;
+        }
+        .climate-metrics .metric label {
+          font-size: clamp(13px, 1.1vw, 17px);
+        }
+        .climate-metrics .metric strong {
+          font-size: clamp(18px, 1.6vw, 24px);
+          margin-top: 2px;
         }
         .actions {
           display: grid;
@@ -2009,8 +2264,8 @@ class Byd3DCard extends HTMLElement {
           background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.03));
           color: #fff;
           border-radius: 14px;
-          font-size: 14px;
-          font-weight: 700;
+          font-size: clamp(16px, 1.3vw, 19px);
+          font-weight: 800;
           padding: 11px 10px;
           display: flex;
           align-items: center;
@@ -2027,9 +2282,19 @@ class Byd3DCard extends HTMLElement {
           box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.12);
         }
         .action-btn.climate-on.active {
+          border-color: rgba(126,198,241,.92);
+          background: linear-gradient(180deg, rgba(35,112,175,.96), rgba(18,61,99,.95));
+          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .action-btn.climate-on.climate-mode-heat.active {
           border-color: rgba(255,126,126,.92);
           background: linear-gradient(180deg, rgba(255,95,95,.96), rgba(180,50,50,.95));
           box-shadow: 0 0 18px rgba(255,95,95,.2), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .action-btn.climate-on.climate-mode-cool.active {
+          border-color: rgba(126,198,241,.92);
+          background: linear-gradient(180deg, rgba(35,112,175,.96), rgba(18,61,99,.95));
+          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.12);
         }
         .action-btn.climate-off.active {
           border-color: rgba(126,198,241,.92);
@@ -2043,6 +2308,17 @@ class Byd3DCard extends HTMLElement {
           width: 100%;
           display: inline-block;
         }
+        .location-actions {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+        .location-map-btn {
+          min-height: 44px;
+          border-color: rgba(98, 192, 255, .44);
+          background: linear-gradient(180deg, rgba(35,112,175,.28), rgba(18,61,99,.2));
+          box-shadow: 0 0 14px rgba(76,179,236,.16), inset 0 1px 0 rgba(255,255,255,.12);
+        }
         .seat-wrap {
           margin-top: 10px;
           border-radius: 14px;
@@ -2051,17 +2327,33 @@ class Byd3DCard extends HTMLElement {
           border: 1px solid rgba(255,255,255,.09);
         }
         .seat-header {
-          font-size: 12px;
-          color: rgba(255,255,255,.72);
-          margin-bottom: 8px;
-          letter-spacing: .6px;
-          display: inline-flex;
+          font-size: 17px;
+          color: rgba(244,251,255,.95);
+          margin-bottom: 10px;
+          letter-spacing: .4px;
+          position: relative;
+          display: flex;
           align-items: center;
-          gap: 6px;
+          justify-content: center;
+          width: 100%;
+          text-align: center;
+          font-weight: 900;
+          text-shadow: 0 0 10px rgba(106,197,255,.3);
+          min-height: 24px;
+        }
+        .seat-header span {
+          direction: rtl;
+          display: inline-block;
+          width: 100%;
+          text-align: center;
         }
         .seat-header ha-icon {
-          width: 16px;
-          height: 16px;
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 20px;
+          height: 20px;
           color: rgba(255, 169, 128, .95);
           filter: drop-shadow(0 0 7px rgba(255, 121, 88, .42));
         }
@@ -2077,10 +2369,11 @@ class Byd3DCard extends HTMLElement {
           border: 1px solid rgba(255,255,255,.08);
         }
         .seat-title {
-          font-size: 12px;
+          font-size: clamp(15px, 1.25vw, 18px);
           color: rgba(255,255,255,.78);
           margin-bottom: 7px;
           text-align: center;
+          font-weight: 800;
         }
         .seat-levels {
           display: grid;
@@ -2094,8 +2387,8 @@ class Byd3DCard extends HTMLElement {
           min-height: 30px;
           background: rgba(255,255,255,.03);
           color: rgba(255,255,255,.85);
-          font-size: 11px;
-          font-weight: 700;
+          font-size: clamp(14px, 1.15vw, 16px);
+          font-weight: 800;
           cursor: pointer;
           text-align: center;
         }
@@ -2120,32 +2413,39 @@ class Byd3DCard extends HTMLElement {
         .climate-controls {
           margin-top: 10px;
           border-radius: 14px;
-          padding: 10px;
+          padding: 8px;
           background: rgba(255,255,255,.04);
           border: 1px solid rgba(255,255,255,.09);
         }
         .climate-row {
           display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 7px;
-          margin-top: 8px;
+          gap: 6px;
+          margin-top: 6px;
         }
         .climate-row:first-child {
-          grid-template-columns: 1fr 1fr;
           margin-top: 0;
         }
+        .climate-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .climate-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .climate-btn {
           appearance: none;
           border: 1px solid rgba(255,255,255,.12);
-          border-radius: 10px;
-          min-height: 34px;
+          border-radius: 9px;
+          min-height: 30px;
           background: rgba(255,255,255,.04);
           color: rgba(255,255,255,.9);
-          font-size: 12px;
-          font-weight: 700;
+          font-size: clamp(14px, 1.15vw, 16px);
+          font-weight: 800;
           cursor: pointer;
-          padding: 0 8px;
+          padding: 0 6px;
           text-align: center;
+        }
+        .climate-btn-temp {
+          cursor: default;
+          pointer-events: none;
+          border-color: rgba(133,186,224,.28);
+          background: linear-gradient(180deg, rgba(26,40,58,.55), rgba(17,27,39,.62));
+          color: rgba(227,243,255,.95);
         }
         .climate-btn.on {
           background: rgba(0,217,255,.2);
@@ -2164,21 +2464,23 @@ class Byd3DCard extends HTMLElement {
         }
         .target-box {
           border: 1px solid rgba(255,255,255,.12);
-          border-radius: 10px;
-          min-height: 34px;
+          border-radius: 9px;
+          min-height: 30px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 10px;
+          padding: 0 8px;
           background: rgba(255,255,255,.03);
         }
         .target-box span {
-          font-size: 11px;
+          font-size: clamp(13px, 1.1vw, 15px);
           color: rgba(255,255,255,.68);
+          font-weight: 700;
         }
         .target-box strong {
-          font-size: 14px;
+          font-size: clamp(17px, 1.5vw, 21px);
           color: #fff;
+          font-weight: 900;
         }
         .tires {
           display: grid;
@@ -2197,8 +2499,8 @@ class Byd3DCard extends HTMLElement {
           text-align: center;
         }
         .tire-card.warn { animation: blink 1s infinite; }
-        .tire-title { font-size: 12px; color: rgba(255,255,255,.72); text-align: center; width: 100%; }
-        .tire-value { margin-top: 4px; font-size: 16px; font-weight: 800; text-align: center; width: 100%; }
+        .tire-title { font-size: clamp(15px, 1.25vw, 18px); color: rgba(255,255,255,.78); text-align: center; width: 100%; font-weight: 800; line-height: 1.06; }
+        .tire-value { margin-top: 4px; font-size: clamp(20px, 1.8vw, 26px); font-weight: 900; text-align: center; width: 100%; line-height: 1.02; }
         @keyframes electric-current { 0% { transform: translateX(-36px); } 100% { transform: translateX(36px); } }
         @keyframes charge-wave { 0% { left: -40%; opacity: .2; } 35% { opacity: 1; } 100% { left: 100%; opacity: .3; } }
         @keyframes blink { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
@@ -2218,7 +2520,7 @@ class Byd3DCard extends HTMLElement {
         @media (max-width: 540px) {
           .hero-title {
             margin: 0 2px 8px;
-            font-size: clamp(25px, 7.1vw, 44px);
+            font-size: calc(var(--byd-hero-title-size, 44px) * 0.82);
           }
           .car-image { height: 190px; }
           .hero { min-height: 165px; }
@@ -2257,23 +2559,33 @@ class Byd3DCard extends HTMLElement {
           .category-title-icon { width: 30px; height: 30px; }
           .category-title-spacer { width: 30px; height: 30px; }
           .category-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-          .cat-tab { min-height: 40px; font-size: 11px; gap: 5px; }
+          .cat-tab { min-height: 40px; font-size: 13px; gap: 5px; }
           .cat-tab ha-icon { width: 14px; height: 14px; }
-          .battery-head-status { font-size: 17px; }
-          .battery-head-power { font-size: 17px; }
-          .battery-percent { font-size: 38px; min-width: 72px; }
-          .battery-range-top { font-size: 18px; margin-top: 6px; margin-bottom: 6px; }
-          .battery-sub { font-size: 14px; }
+          .metric label { font-size: 13px; }
+          .metric strong { font-size: 18px; }
+          .action-btn { font-size: 14px; }
+          .action-btn ha-icon { width: 17px; height: 17px; }
+          .seat-level { min-height: 30px; font-size: 13px; }
+          .climate-btn { min-height: 30px; font-size: 13px; }
+          .target-box { min-height: 30px; }
+          .target-box span { font-size: 12px; }
+          .target-box strong { font-size: 16px; }
+          .tire-title { font-size: 13px; }
+          .tire-value { font-size: 20px; }
+          .battery-head-status { font-size: 14px; }
+          .battery-head-power { font-size: 14px; }
+          .battery-head-range { font-size: 13px; }
+          .battery-percent { font-size: 34px; min-width: 64px; }
+          .battery-sub { font-size: 13px; }
           .charging-text { font-size: 15px; }
-          .battery-sub .charge-state { font-size: 15px; }
+          .battery-sub .charge-state { font-size: 14px; }
           .battery-inline-state { font-size: 12px; padding: 1px 8px; }
           .seat-grid { grid-template-columns: 1fr; }
-          .climate-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          .climate-row:first-child {
-            grid-template-columns: 1fr;
-          }
+          .vehicle-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .climate-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .climate-metrics .metric { min-height: 64px; }
+          .climate-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .climate-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
       </style>
     `;
@@ -2289,6 +2601,7 @@ class Byd3DCard extends HTMLElement {
         if (action === "unlock") this._showConfirmation("unlock", { key });
         if (action === "climate_on") this._callClimatePower(true);
         if (action === "climate_off") this._callClimatePower(false);
+        if (action === "location_map") this._openMoreInfo("location");
         if (action === "press") {
           this._callButton(key);
           if (this._buttonFeedbacks) {
@@ -2419,6 +2732,7 @@ class Byd3DCardEditor extends HTMLElement {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
+    this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     this._render();
   }
 
@@ -2458,6 +2772,12 @@ class Byd3DCardEditor extends HTMLElement {
     const n = Number(value);
     if (!Number.isFinite(n)) return 25;
     return clamp(Math.round(n), 8, 120);
+  }
+
+  _normalizeTitleFontSize(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 46;
+    return clamp(Math.round(n), 24, 72);
   }
 
   _categoryLabel(key) {
@@ -2564,12 +2884,13 @@ class Byd3DCardEditor extends HTMLElement {
       .map(([key, profile]) => {
         const active = this._config.vehicle_profile === key ? "active" : "";
         const basePath = (this._config.image_base_path || "/local/byd-card/pic").replace(/\/$/, "");
-        const localImage =
-          key === "atto3"
-            ? `${basePath}/bydatoo3.png`
-            : key === "dolphin"
-              ? `${basePath}/byd_dolphin.png`
-              : profile.image;
+        const localImages = {
+          atto3: `${basePath}/bydatoo3.png`,
+          seal: `${basePath}/seal.png`,
+          dolphin: `${basePath}/byd_dolphin.png`,
+          sealion7: `${basePath}/sealion.png`,
+        };
+        const localImage = localImages[key] || profile.image;
         return `
           <button class="profile ${active}" data-profile="${key}" title="${profile.label}">
             <img src="${localImage}" data-fallback="${profile.image}" alt="${profile.label}" />
@@ -2607,6 +2928,7 @@ class Byd3DCardEditor extends HTMLElement {
 
   _populatePrefixCandidates() {
     if (!this._hass || !this.shadowRoot) return;
+    if (!this._hass.states || typeof this._hass.states !== "object") return;
     const list = this.shadowRoot.getElementById("prefix_suggestions");
     if (!list) return;
     const prefixes = new Set();
@@ -2646,6 +2968,18 @@ class Byd3DCardEditor extends HTMLElement {
             <div class="field">
               <label>${this._t("settings_card_title")}</label>
               <input id="title" type="text" value="${this._config.title || ""}" placeholder="BYD ATTO 3" />
+            </div>
+            <div class="field">
+              <label>${this._t("settings_title_font_size")}</label>
+              <input
+                id="title_font_size"
+                type="number"
+                min="24"
+                max="72"
+                step="1"
+                value="${this._normalizeTitleFontSize(this._config.title_font_size)}"
+              />
+              <small>${this._t("settings_title_font_size_hint")}</small>
             </div>
             <div class="field">
               <label>${this._t("settings_prefix")}</label>
@@ -2875,29 +3209,62 @@ class Byd3DCardEditor extends HTMLElement {
           gap: 8px;
         }
         .category-order-item {
+          position: relative;
+          overflow: hidden;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 10px;
           padding: 10px 12px;
           border-radius: 12px;
-          border: 1px solid rgba(157,190,220,.16);
-          background: rgba(16,23,32,.66);
+          border: 1px solid rgba(157,190,220,.22);
+          background:
+            radial-gradient(circle at 18% 0%, rgba(102,180,255,.16), transparent 44%),
+            linear-gradient(180deg, rgba(31,46,66,.86), rgba(12,18,28,.9));
           cursor: grab;
           user-select: none;
-          transition: border-color .2s ease, background .2s ease, transform .14s ease, box-shadow .2s ease;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.15),
+            inset 0 -10px 16px rgba(0,0,0,.42),
+            0 8px 18px rgba(0,0,0,.25);
+          transition: border-color .2s ease, background .2s ease, transform .14s ease, box-shadow .2s ease, filter .2s ease;
+        }
+        .category-order-item::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0) 42%);
+          opacity: .5;
+        }
+        .category-order-item::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: radial-gradient(circle at 88% 100%, rgba(0,170,255,.2), transparent 38%);
+          opacity: .42;
         }
         .category-order-item:hover {
-          border-color: rgba(77,189,255,.45);
-          background: rgba(24,38,52,.7);
+          border-color: rgba(100,201,255,.62);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.2),
+            inset 0 -12px 18px rgba(0,0,0,.5),
+            0 12px 24px rgba(22,112,176,.24);
+          filter: saturate(1.06);
         }
         .category-order-item.drag-over {
           border-color: rgba(35,188,255,.86);
-          box-shadow: 0 0 0 1px rgba(35,188,255,.42) inset, 0 8px 20px rgba(35,188,255,.14);
+          box-shadow:
+            0 0 0 1px rgba(35,188,255,.42) inset,
+            0 10px 22px rgba(35,188,255,.22),
+            inset 0 1px 0 rgba(255,255,255,.2);
         }
         .category-order-item.dragging {
-          opacity: .65;
-          transform: scale(.985);
+          opacity: .8;
+          transform: scale(.987);
           cursor: grabbing;
         }
         .category-order-main {
@@ -2918,28 +3285,61 @@ class Byd3DCardEditor extends HTMLElement {
           pointer-events: none;
         }
         .toggle-chip {
+          position: relative;
+          overflow: hidden;
           margin: 0;
           display: flex;
           align-items: center;
           gap: 10px;
           padding: 10px 11px;
           border-radius: 12px;
-          border: 1px solid rgba(157,190,220,.16);
-          background: rgba(16,23,32,.66);
+          border: 1px solid rgba(157,190,220,.22);
+          background:
+            radial-gradient(circle at 22% 0%, rgba(99,170,255,.16), transparent 42%),
+            linear-gradient(180deg, rgba(31,46,66,.86), rgba(12,18,28,.9));
           cursor: pointer;
           font-weight: 700;
           color: #e8f2fb;
-          transition: border-color .2s ease, background .2s ease;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.15),
+            inset 0 -10px 16px rgba(0,0,0,.42),
+            0 8px 18px rgba(0,0,0,.24);
+          transition: border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .14s ease, filter .2s ease;
+        }
+        .toggle-chip::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0) 42%);
+          opacity: .48;
         }
         .toggle-chip:hover {
-          border-color: rgba(77,189,255,.45);
-          background: rgba(24,38,52,.7);
+          border-color: rgba(100,201,255,.62);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.2),
+            inset 0 -12px 18px rgba(0,0,0,.5),
+            0 12px 24px rgba(22,112,176,.24);
+          transform: translateY(-1px);
+          filter: saturate(1.05);
         }
         .toggle-chip input[type="checkbox"] {
           width: 18px;
           height: 18px;
           accent-color: #2abfff;
           cursor: pointer;
+          filter: drop-shadow(0 0 8px rgba(63,189,255,.35));
+          z-index: 1;
+        }
+        .toggle-chip input[type="checkbox"] + span {
+          z-index: 1;
+          letter-spacing: .1px;
+          text-shadow: 0 1px 8px rgba(0,0,0,.34);
+        }
+        .toggle-chip input[type="checkbox"]:checked + span {
+          color: #f3fbff;
+          text-shadow: 0 0 12px rgba(97,210,255,.45);
         }
         @media (max-width: 540px) {
           .editor {
@@ -2960,6 +3360,7 @@ class Byd3DCardEditor extends HTMLElement {
           this.shadowRoot.getElementById("refresh_interval_seconds").value
         ),
         title: this.shadowRoot.getElementById("title").value.trim(),
+        title_font_size: this._normalizeTitleFontSize(this.shadowRoot.getElementById("title_font_size").value),
         entity_prefix: this.shadowRoot.getElementById("prefix").value.trim(),
         language: this._config.language || "he",
         image_url: this.shadowRoot.getElementById("image_url").value.trim(),
@@ -2972,11 +3373,12 @@ class Byd3DCardEditor extends HTMLElement {
         show_location: this.shadowRoot.getElementById("show_location").checked,
       });
 
-    this.shadowRoot.getElementById("title").addEventListener("input", onChange);
-    this.shadowRoot.getElementById("prefix").addEventListener("input", onChange);
-    this.shadowRoot.getElementById("image_url").addEventListener("input", onChange);
-    this.shadowRoot.getElementById("image_base_path").addEventListener("input", onChange);
-    this.shadowRoot.getElementById("i18n_base_path").addEventListener("input", onChange);
+    this.shadowRoot.getElementById("title").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("title_font_size").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("prefix").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("image_url").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("image_base_path").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("i18n_base_path").addEventListener("change", onChange);
     this.shadowRoot.getElementById("refresh_interval_seconds").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_climate").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_vehicle").addEventListener("change", onChange);
@@ -2988,7 +3390,12 @@ class Byd3DCardEditor extends HTMLElement {
       button.addEventListener("click", () => {
         const key = button.getAttribute("data-profile");
         if (!key) return;
-        this._emitChange({ vehicle_profile: key });
+        const defaults = PROFILE_DEFAULTS[key] || {};
+        this._emitChange({
+          vehicle_profile: key,
+          title: defaults.title || this._config.title,
+          entity_prefix: defaults.entity_prefix || this._config.entity_prefix,
+        });
         this._render();
       });
     });
@@ -3023,11 +3430,11 @@ if (!customElements.get("byd-3d-card-editor")) {
 }
 
 window.customCards = window.customCards || [];
-if (!window.customCards.find((card) => card.type === `custom:${CARD_TYPE}`)) {
+if (!window.customCards.find((card) => card.type === CARD_TYPE)) {
   window.customCards.push({
-    type: `custom:${CARD_TYPE}`,
+    type: CARD_TYPE,
     name: CARD_NAME,
-    preview: true,
+    preview: false,
     description: "Dynamic 3D BYD dashboard card with vehicle profiles.",
     documentationURL: "https://github.com/jkaberg/hass-byd-vehicle",
   });
