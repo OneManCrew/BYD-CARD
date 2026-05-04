@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "0.1.0";
+const CARD_VERSION = "0.0.1";
 
 const PROFILE_IMAGES = {
   atto3:
@@ -1069,16 +1069,16 @@ class Byd3DCard extends HTMLElement {
     const alertJoined = alerts.map((msg) => `⚠ ${msg}`).join("   •   ");
     const alertRibbon = alerts.length
       ? `
-        <div class="alert-ribbon ${alerts.length > 1 ? "scrolling" : ""}">
+        <div class="alert-ribbon ${alerts.length > 1 ? "scrolling" : "single"}">
           <div class="alert-ribbon-inner">
+            ${
+              alerts.length > 1
+                ? `
             <div class="alert-ribbon-head">
               <span class="alert-ribbon-sign">⚠</span>
-              <span>${this._t(alerts.length === 1 ? "alert_header_single" : "alert_header")}</span>
+              <span>${this._t("alert_header")}</span>
             </div>
             <div class="alert-ribbon-body">
-              ${
-                alerts.length > 1
-                  ? `
                 <div class="alert-marquee">
                   <div class="alert-marquee-track">
                     <span class="alert-marquee-line">${alertJoined}</span>
@@ -1086,8 +1086,16 @@ class Byd3DCard extends HTMLElement {
                   </div>
                 </div>
               `
-                  : `<div class="alert-single">⚠ ${alerts[0]}</div>`
-              }
+                : `
+            <div class="alert-ribbon-body">
+              <div class="alert-single">⚠ ${alerts[0]}</div>
+            </div>
+            <div class="alert-ribbon-head">
+              <span>${this._t("alert_header_single")}</span>
+              <span class="alert-ribbon-sign">⚠</span>
+            </div>
+              `
+            }
             </div>
           </div>
         </div>
@@ -1176,6 +1184,7 @@ class Byd3DCard extends HTMLElement {
           <span class="battery-head-power">${powerMarkup}</span>
           <span class="battery-head-status">${chargingHeadLabel}</span>
         </div>
+        <div class="battery-range-top">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
         <div class="battery-row">
           <div class="battery-shell ${isCharging ? "is-charging" : ""}">
             <div class="battery-fill ${isCharging ? "charging" : ""}" style="width:${battery}%"></div>
@@ -1184,7 +1193,6 @@ class Byd3DCard extends HTMLElement {
           </div>
           <div class="battery-percent">${battery.toFixed(0)}%</div>
         </div>
-        <div class="battery-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
         ${isCharging ? `<div class="battery-sub"><span class="charge-state">${this._t("charging")}</span></div>` : ""}
       </div>
       ${summaryMetrics}
@@ -1620,6 +1628,18 @@ class Byd3DCard extends HTMLElement {
         .alert-ribbon-body {
           min-width: 0;
         }
+        .alert-ribbon.single .alert-ribbon-inner {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .alert-ribbon.single .alert-ribbon-body {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+        .alert-ribbon.single .alert-ribbon-head {
+          justify-self: start;
+        }
         .alert-ribbon-sign {
           display: inline-flex;
           align-items: center;
@@ -1641,6 +1661,7 @@ class Byd3DCard extends HTMLElement {
           overflow: hidden;
           text-overflow: ellipsis;
           text-align: center;
+          width: 100%;
         }
         .alert-marquee {
           flex: 1;
@@ -1923,12 +1944,13 @@ class Byd3DCard extends HTMLElement {
             0 0 18px rgba(120,220,255,.75),
             0 0 34px rgba(81,187,255,.5);
         }
-        .battery-range {
+        .battery-range-top {
           margin-top: 8px;
+          margin-bottom: 8px;
           font-size: 22px;
           font-weight: 900;
           color: rgba(228,247,255,.96);
-          text-align: right;
+          text-align: center;
           letter-spacing: .1px;
           white-space: nowrap;
           text-shadow: 0 0 16px rgba(109,210,255,.32);
@@ -2210,12 +2232,13 @@ class Byd3DCard extends HTMLElement {
           .hero-battery-badge {
             top: 10px;
             right: 10px;
-            min-width: 90px;
-            padding: 6px 8px;
-            border-radius: 10px;
+            min-width: 74px;
+            max-width: 80px;
+            padding: 4px 6px;
+            border-radius: 8px;
           }
-          .hero-battery-label { font-size: 10px; }
-          .hero-battery-value { font-size: 19px; }
+          .hero-battery-label { font-size: 9px; }
+          .hero-battery-value { font-size: 16px; margin-top: 1px; }
           .hero-service-item {
             width: 30px;
             height: 30px;
@@ -2233,11 +2256,13 @@ class Byd3DCard extends HTMLElement {
           .category-title-row { grid-template-columns: 30px 1fr 30px; }
           .category-title-icon { width: 30px; height: 30px; }
           .category-title-spacer { width: 30px; height: 30px; }
-          .category-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .category-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .cat-tab { min-height: 40px; font-size: 11px; gap: 5px; }
+          .cat-tab ha-icon { width: 14px; height: 14px; }
           .battery-head-status { font-size: 17px; }
           .battery-head-power { font-size: 17px; }
           .battery-percent { font-size: 38px; min-width: 72px; }
-          .battery-range { font-size: 18px; }
+          .battery-range-top { font-size: 18px; margin-top: 6px; margin-bottom: 6px; }
           .battery-sub { font-size: 14px; }
           .charging-text { font-size: 15px; }
           .battery-sub .charge-state { font-size: 15px; }
@@ -2406,6 +2431,17 @@ class Byd3DCardEditor extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._render();
     this._populatePrefixCandidates();
+  }
+
+  _language() {
+    return this._config?.language || "he";
+  }
+
+  _t(key) {
+    const lang = this._language();
+    const base = this._config?.i18n_base_path || "/local/byd-card/i18n";
+    const cached = TRANSLATION_CACHE.get(`${lang}:${base}`);
+    return cached?.[key] || FALLBACK_I18N[key] || key;
   }
 
   _normalizeCategoryOrder(order) {
@@ -2588,6 +2624,9 @@ class Byd3DCardEditor extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot) return;
+    if (!this._config) {
+      this._config = { ...DEFAULT_CONFIG, entities: {} };
+    }
 
     this.shadowRoot.innerHTML = `
       <div class="editor-shell">
