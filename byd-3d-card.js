@@ -191,6 +191,7 @@ const DEFAULT_CONFIG = {
   show_climate: true,
   show_vehicle: true,
   show_location: true,
+  refresh_interval_seconds: 25,
   language: "he",
   category_order: ["summary", "climate", "vehicle", "tires", "location", "actions"],
   entities: {},
@@ -264,6 +265,8 @@ const FALLBACK_I18N = {
   settings_image_url: "תמונת רכב (אופציונלי)",
   settings_image_base_path: "נתיב בסיס לתמונות פרופיל",
   settings_i18n_base_path: "נתיב בסיס לקבצי שפה",
+  settings_refresh_interval: "רענון סטייט (שניות)",
+  settings_refresh_interval_hint: "כמה מהר לעדכן חיווי מהשרת (מומלץ 20-30)",
   settings_language: "שפה",
   settings_categories: "קטגוריות",
   settings_category_order: "סדר קטגוריות",
@@ -321,9 +324,11 @@ class Byd3DCard extends HTMLElement {
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
+    this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+    this._restartAutoRefreshLoop();
     const storedCategory = this._loadStoredCategory();
     this._activeCategory = storedCategory || this._activeCategory || "summary";
     if (!this._seatUiOverrides) {
@@ -419,6 +424,17 @@ class Byd3DCard extends HTMLElement {
     });
   }
 
+  _normalizeRefreshInterval(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 25;
+    return clamp(Math.round(n), 8, 120);
+  }
+
+  _getAutoRefreshIntervalMs() {
+    const seconds = this._normalizeRefreshInterval(this._config?.refresh_interval_seconds);
+    return seconds * 1000;
+  }
+
   _schedulePostActionRefresh() {
     if (this._postActionTimers?.length) {
       this._postActionTimers.forEach((timer) => window.clearTimeout(timer));
@@ -439,7 +455,7 @@ class Byd3DCard extends HTMLElement {
       if (document.visibilityState === "visible") {
         this._refreshStateEntities(false);
       }
-    }, 25000);
+    }, this._getAutoRefreshIntervalMs());
     this._refreshStateEntities(true);
   }
 
@@ -457,6 +473,12 @@ class Byd3DCard extends HTMLElement {
       this._postActionTimers.forEach((timer) => window.clearTimeout(timer));
       this._postActionTimers = [];
     }
+  }
+
+  _restartAutoRefreshLoop() {
+    if (!this._autoRefreshStarted) return;
+    this._stopAutoRefreshLoop();
+    this._startAutoRefreshLoop();
   }
 
   set hass(hass) {
@@ -866,6 +888,8 @@ class Byd3DCard extends HTMLElement {
       .join("");
 
     const acSwitchState = this._state("ac_switch");
+    const hasAcSwitchEntity = Boolean(this._resolveEntity("ac_switch"));
+    const climateIndicatorIsOn = hasAcSwitchEntity ? this._isClimateActive(acSwitchState?.state) : false;
     const climateIsOn = this._isClimateActive(climateState?.state) || this._isClimateActive(acSwitchState?.state);
     const climateTempRaw = toNumber(climateState?.attributes?.temperature);
     const climateMin = toNumber(climateState?.attributes?.min_temp) ?? 15;
@@ -1019,7 +1043,7 @@ class Byd3DCard extends HTMLElement {
     );
     const canCloseWindows = Boolean(this._resolveEntity("close_windows"));
     const canToggleLock = Boolean(this._resolveEntity("lock"));
-    if (climateIsOn) pushIndicator("climate", "mdi:air-conditioner", this._t("ac"), "cold", canControlClimate);
+    if (climateIndicatorIsOn) pushIndicator("climate", "mdi:air-conditioner", this._t("ac"), "cold", canControlClimate);
     if (batteryHeatState?.state === "on") {
       pushIndicator("battery_heat", "mdi:heat-wave", this._t("battery_heat"), "hot", canToggleBatteryHeat);
     }
@@ -2105,6 +2129,7 @@ class Byd3DCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
+    this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._render();
   }
 
@@ -2127,6 +2152,12 @@ class Byd3DCardEditor extends HTMLElement {
       if (!cleaned.includes(key)) cleaned.push(key);
     }
     return cleaned;
+  }
+
+  _normalizeRefreshInterval(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 25;
+    return clamp(Math.round(n), 8, 120);
   }
 
   _categoryLabel(key) {
@@ -2339,6 +2370,18 @@ class Byd3DCardEditor extends HTMLElement {
               <label>${FALLBACK_I18N.settings_i18n_base_path}</label>
               <input id="i18n_base_path" type="text" value="${this._config.i18n_base_path || ""}" placeholder="/local/byd-card/i18n" />
             </div>
+            <div class="field">
+              <label>${FALLBACK_I18N.settings_refresh_interval}</label>
+              <input
+                id="refresh_interval_seconds"
+                type="number"
+                min="8"
+                max="120"
+                step="1"
+                value="${this._normalizeRefreshInterval(this._config.refresh_interval_seconds)}"
+              />
+              <small>${FALLBACK_I18N.settings_refresh_interval_hint}</small>
+            </div>
           </section>
 
           <section class="group">
@@ -2429,7 +2472,8 @@ class Byd3DCardEditor extends HTMLElement {
           font-weight: 700;
           color: #f4f8fc;
         }
-        input[type="text"] {
+        input[type="text"],
+        input[type="number"] {
           border: 1px solid rgba(157,190,220,.18);
           background: linear-gradient(180deg, rgba(17,23,33,.72), rgba(13,18,27,.82));
           border-radius: 14px;
@@ -2439,7 +2483,8 @@ class Byd3DCardEditor extends HTMLElement {
           font-size: 16px;
           transition: border-color .2s ease, box-shadow .2s ease, transform .1s ease;
         }
-        input[type="text"]:focus {
+        input[type="text"]:focus,
+        input[type="number"]:focus {
           outline: none;
           border-color: rgba(0,184,255,.75);
           box-shadow: 0 0 0 2px rgba(0,184,255,.22), 0 10px 24px rgba(0,184,255,.12);
@@ -2608,6 +2653,9 @@ class Byd3DCardEditor extends HTMLElement {
 
     const onChange = () =>
       this._emitChange({
+        refresh_interval_seconds: this._normalizeRefreshInterval(
+          this.shadowRoot.getElementById("refresh_interval_seconds").value
+        ),
         title: this.shadowRoot.getElementById("title").value.trim(),
         entity_prefix: this.shadowRoot.getElementById("prefix").value.trim(),
         language: this._config.language || "he",
@@ -2626,6 +2674,7 @@ class Byd3DCardEditor extends HTMLElement {
     this.shadowRoot.getElementById("image_url").addEventListener("input", onChange);
     this.shadowRoot.getElementById("image_base_path").addEventListener("input", onChange);
     this.shadowRoot.getElementById("i18n_base_path").addEventListener("input", onChange);
+    this.shadowRoot.getElementById("refresh_interval_seconds").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_climate").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_vehicle").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_tires").addEventListener("change", onChange);
