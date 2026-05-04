@@ -236,6 +236,7 @@ const FALLBACK_I18N = {
   category_vehicle: "רכב",
   category_tires: "צמיגים",
   category_actions: "פעולות מהירות",
+  unlock: "פתיחה",
   category_location: "מיקום",
   ac: "מזגן",
   battery_heat: "חימום סוללה",
@@ -260,7 +261,7 @@ const FALLBACK_I18N = {
   settings_title: "BYD 3D Card",
   settings_hint: "בחר פרופיל רכב, שפה וקטגוריות תצוגה.",
   settings_card_title: "כותרת",
-  settings_prefix: "Entity Prefix",
+  settings_prefix: "קידומת ישות",
   settings_prefix_help: "לדוגמה: byd_atto_3 עבור sensor.byd_atto_3_battery_level",
   settings_image_url: "תמונת רכב (אופציונלי)",
   settings_image_base_path: "נתיב בסיס לתמונות פרופיל",
@@ -284,10 +285,22 @@ const FALLBACK_I18N = {
   max_heat: "מקסימום חימום",
   comfort_21: "נוחות 21°",
   alert_header: "התראת רכב",
+  confirm_unlock: "האם אתה בטוח שברצונך לפתוח את הרכב?",
+  executed: "בוצע",
   alert_more: "תקלות נוספות",
   alert_tire_pressure_low: "לחץ אוויר נמוך",
   alert_tire_pressure_critical: "לחץ אוויר קריטי",
   alert_system_fault: "תקלה במערכת",
+  alert_header_single: "התראה ברכב",
+  alert_tpms: "TPMS",
+  alert_abs: "ABS",
+  alert_brake: "בלם",
+  alert_steering: "הגה",
+  alert_charging: "טעינה",
+  alert_srs: "SRS",
+  alert_svs: "SVS",
+  settings_vehicle_profile: "פרופיל רכב",
+  aria_vehicle_categories: "קטגוריות רכב",
 };
 
 function clamp(value, min, max) {
@@ -334,6 +347,8 @@ class Byd3DCard extends HTMLElement {
     if (!this._seatUiOverrides) {
       this._seatUiOverrides = {};
     }
+    this._confirmation = null;
+    this._buttonFeedbacks = new Map();
     this._translations = FALLBACK_I18N;
     this._loadTranslations();
     this._render();
@@ -674,8 +689,36 @@ class Byd3DCard extends HTMLElement {
     if (!eid || !this._hass) return;
     const [domain] = eid.split(".");
     if (!domain) return;
+
+    if (domain === "lock") {
+      const state = this._state(logicalKey)?.state;
+      const isLocked = state === "locked" || state === "off";
+      const service = isLocked ? "unlock" : "lock";
+      this._hass.callService("lock", service, { entity_id: eid });
+      this._schedulePostActionRefresh();
+      return;
+    }
+
     this._hass.callService(domain, "toggle", { entity_id: eid });
     this._schedulePostActionRefresh();
+  }
+
+  _callLock(logicalKey, unlock) {
+    const eid = this._resolveEntity(logicalKey);
+    if (!eid || !this._hass) return;
+    const service = unlock ? "unlock" : "lock";
+    this._hass.callService("lock", service, { entity_id: eid });
+    this._schedulePostActionRefresh();
+  }
+
+  _showConfirmation(type, payload = {}) {
+    this._confirmation = { type, ...payload };
+    this._render();
+  }
+
+  _hideConfirmation() {
+    this._confirmation = null;
+    this._render();
   }
 
   _callClimatePower(on) {
@@ -779,15 +822,13 @@ class Byd3DCard extends HTMLElement {
     }
   }
 
-  _renderActionButton(key, title, icon, handler) {
-    const eid = this._resolveEntity(key);
-    if (!eid) return "";
-    return `
-      <button class="action-btn" data-action="${handler}" data-key="${key}">
-        <ha-icon icon="${icon}"></ha-icon>
-        <span>${title}</span>
-      </button>
-    `;
+  _getButtonText(key, defaultText) {
+    if (!this._buttonFeedbacks) return defaultText;
+    const feedback = this._buttonFeedbacks.get(key);
+    if (feedback && Date.now() < feedback.until) {
+      return feedback.text;
+    }
+    return defaultText;
   }
 
   _metric(label, value) {
@@ -843,9 +884,30 @@ class Byd3DCard extends HTMLElement {
     window.setTimeout(() => btn.classList.remove("btn-feedback"), 520);
   }
 
+  _renderActionButton(key, title, icon, handler, active = false, extraClass = "") {
+    const eid = this._resolveEntity(key);
+    if (!eid) return "";
+    return `
+      <button class="action-btn ${active ? "active" : ""} ${extraClass}" data-action="${handler}" data-key="${key}">
+        <ha-icon icon="${icon}"></ha-icon>
+        <span>${title}</span>
+      </button>
+    `;
+  }
+
   _render() {
     if (!this.shadowRoot) return;
     if (!this._config) return;
+
+    // Clean up expired button feedbacks
+    if (this._buttonFeedbacks) {
+      const now = Date.now();
+      for (const [key, feedback] of this._buttonFeedbacks) {
+        if (now >= feedback.until) {
+          this._buttonFeedbacks.delete(key);
+        }
+      }
+    }
 
     const profile = VEHICLE_PROFILES[this._config.vehicle_profile] || VEHICLE_PROFILES.atto3;
     const title = this._config.title || profile.label;
@@ -991,17 +1053,17 @@ class Byd3DCard extends HTMLElement {
 
     const boolFaultState = (s) => s?.state === "on";
     if (boolFaultState(rapidTireLeakState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rapid_tire_leak")}`);
-    if (boolFaultState(tirepressureSystemState)) addAlert(`${this._t("alert_system_fault")} - TPMS`);
+    if (boolFaultState(tirepressureSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_tpms")}`);
     if (boolFaultState(lfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_left")}`);
     if (boolFaultState(rfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_right")}`);
     if (boolFaultState(lrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_left")}`);
     if (boolFaultState(rrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_right")}`);
-    if (boolFaultState(absWarningState)) addAlert(`${this._t("alert_system_fault")} - ABS`);
-    if (boolFaultState(brakingSystemState)) addAlert(`${this._t("alert_system_fault")} - Brake`);
-    if (boolFaultState(steeringSystemState)) addAlert(`${this._t("alert_system_fault")} - Steering`);
-    if (boolFaultState(chargingSystemState)) addAlert(`${this._t("alert_system_fault")} - Charging`);
-    if (boolFaultState(srsState)) addAlert(`${this._t("alert_system_fault")} - SRS`);
-    if (boolFaultState(svsState)) addAlert(`${this._t("alert_system_fault")} - SVS`);
+    if (boolFaultState(absWarningState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_abs")}`);
+    if (boolFaultState(brakingSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_brake")}`);
+    if (boolFaultState(steeringSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_steering")}`);
+    if (boolFaultState(chargingSystemState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_charging")}`);
+    if (boolFaultState(srsState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_srs")}`);
+    if (boolFaultState(svsState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("alert_svs")}`);
 
     const alertJoined = alerts.map((msg) => `⚠ ${msg}`).join("   •   ");
     const alertRibbon = alerts.length
@@ -1010,7 +1072,7 @@ class Byd3DCard extends HTMLElement {
           <div class="alert-ribbon-inner">
             <div class="alert-ribbon-head">
               <span class="alert-ribbon-sign">⚠</span>
-              <span>${this._t("alert_header")}</span>
+              <span>${this._t(alerts.length === 1 ? "alert_header_single" : "alert_header")}</span>
             </div>
             <div class="alert-ribbon-body">
               ${
@@ -1069,6 +1131,13 @@ class Byd3DCard extends HTMLElement {
         <span class="hero-battery-value">${battery.toFixed(0)}%</span>
       </div>
     `;
+    const heroLockBadge = lockState
+      ? `
+        <div class="hero-lock-badge actionable ${lockState.state === "unlocked" || lockState.state === "on" ? "warn" : "ok"}" title="${this._boolLabel(lockState.state)}" data-key="lock">
+          <ha-icon icon="${lockState.state === "unlocked" || lockState.state === "on" ? "mdi:lock-open-variant-outline" : "mdi:lock"}"></ha-icon>
+        </div>
+      `
+      : "";
     const serviceOverlay = visibleServiceIndicators.length
       ? `
         <div class="hero-services-grid">
@@ -1185,17 +1254,23 @@ class Byd3DCard extends HTMLElement {
         ? this._category(this._t("category_tires"), `<div class="tires">${tireCards}</div>`, { icon: "mdi:car-tire-alert" })
         : "";
 
+    const lockActive = lockState?.state === "locked" || lockState?.state === "off";
+    const unlockActive = lockState?.state === "unlocked" || lockState?.state === "on";
+    const climateOnActive = climateIsOn;
+    const climateOffActive = !climateIsOn;
     const actionsCategory = this._config.show_actions
       ? this._category(
           this._t("category_actions"),
           `
             <div class="actions">
-              ${this._renderActionButton("lock", this._t("lock"), "mdi:lock", "toggle")}
-              ${this._renderActionButton("climate", this._t("ac"), "mdi:air-conditioner", "toggle")}
-              ${this._renderActionButton("battery_heat", this._t("battery_heat"), "mdi:heat-wave", "toggle")}
-              ${this._renderActionButton("flash_lights", this._t("flash_lights"), "mdi:car-light-high", "press")}
-              ${this._renderActionButton("find_car", this._t("find_car"), "mdi:car-search", "press")}
-              ${this._renderActionButton("close_windows", this._t("close_windows"), "mdi:window-closed-variant", "press")}
+              ${this._renderActionButton("lock", this._getButtonText("lock", this._t("lock")), "mdi:lock", "lock", lockActive)}
+              ${this._renderActionButton("lock", this._getButtonText("unlock", this._t("unlock")), "mdi:lock-open-variant-outline", "unlock", unlockActive)}
+              ${this._renderActionButton("climate", this._getButtonText("climate_on", this._t("ac")), "mdi:air-conditioner", "climate_on", climateOnActive, "climate-on")}
+              ${this._renderActionButton("climate", this._getButtonText("climate_off", this._t("turn_off")), "mdi:air-conditioner", "climate_off", climateOffActive, "climate-off")}
+              ${this._renderActionButton("battery_heat", this._getButtonText("battery_heat", this._t("battery_heat")), "mdi:heat-wave", "toggle")}
+              ${this._renderActionButton("flash_lights", this._getButtonText("flash_lights", this._t("flash_lights")), "mdi:car-light-high", "press")}
+              ${this._renderActionButton("find_car", this._getButtonText("find_car", this._t("find_car")), "mdi:car-search", "press")}
+              ${this._renderActionButton("close_windows", this._getButtonText("close_windows", this._t("close_windows")), "mdi:window-closed-variant", "press")}
             </div>
           `
         , { icon: "mdi:gesture-tap-button" })
@@ -1234,6 +1309,20 @@ class Byd3DCard extends HTMLElement {
     const activeTab = visibleTabs.find((tab) => tab.key === this._activeCategory) || visibleTabs[0];
     this._persistActiveCategory(activeTab?.key);
     const activeContent = activeTab?.content || "";
+    const confirmationOverlay = this._confirmation
+      ? `
+        <div class="dialog-backdrop" data-dialog-backdrop>
+          <div class="dialog-card">
+            <div class="dialog-title">${this._t("unlock")}</div>
+            <div class="dialog-text">${this._t("confirm_unlock")}</div>
+            <div class="dialog-actions">
+              <button class="dialog-btn cancel" data-dialog-action="cancel">${this._t("no")}</button>
+              <button class="dialog-btn confirm" data-dialog-action="confirm">${this._t("unlock")}</button>
+            </div>
+          </div>
+        </div>
+      `
+      : "";
 
     this.shadowRoot.innerHTML = `
       <ha-card>
@@ -1244,12 +1333,14 @@ class Byd3DCard extends HTMLElement {
             <div class="hero-overlay">
               ${heroBatteryOverlay}
               ${serviceOverlay}
+              ${heroLockBadge}
             </div>
           </div>
 
           ${alertRibbon}
+          ${confirmationOverlay}
 
-          <div class="category-tabs" role="radiogroup" aria-label="Vehicle categories">
+          <div class="category-tabs" role="radiogroup" aria-label="${this._t("aria_vehicle_categories")}">
             ${visibleTabs
               .map((tab) => {
                 const active = tab.key === this._activeCategory ? "active" : "";
@@ -1281,6 +1372,7 @@ class Byd3DCard extends HTMLElement {
           background: transparent;
         }
         .wrap {
+          position: relative;
           background:
             radial-gradient(circle at 14% 4%, rgba(58,93,134,.7) 0%, rgba(26,38,55,.95) 44%, rgba(10,14,22,1) 100%);
           padding: 14px;
@@ -1344,35 +1436,71 @@ class Byd3DCard extends HTMLElement {
         }
         .hero-battery-badge {
           position: absolute;
-          top: 12px;
-          right: 12px;
-          min-width: 106px;
-          padding: 7px 10px;
-          border-radius: 12px;
+          top: 10px;
+          right: 10px;
+          min-width: 80px;
+          max-width: 88px;
+          padding: 5px 7px;
+          border-radius: 10px;
           border: 1px solid rgba(126,198,241,.42);
           background: linear-gradient(180deg, rgba(13,24,36,.72), rgba(10,17,26,.86));
-          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.15);
-          text-align: right;
+          box-shadow: 0 0 14px rgba(76,179,236,.16), inset 0 1px 0 rgba(255,255,255,.15);
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
         }
         .hero-battery-badge.low {
           border-color: rgba(255,126,126,.58);
-          box-shadow: 0 0 16px rgba(255,95,95,.22), inset 0 1px 0 rgba(255,255,255,.15);
+          box-shadow: 0 0 12px rgba(255,95,95,.18), inset 0 1px 0 rgba(255,255,255,.15);
         }
         .hero-battery-label {
           display: block;
-          font-size: 11px;
+          font-size: 9px;
           font-weight: 800;
           color: rgba(222,241,255,.82);
           line-height: 1.1;
         }
         .hero-battery-value {
           display: block;
-          margin-top: 2px;
-          font-size: 24px;
+          margin-top: 1px;
+          font-size: 18px;
           font-weight: 900;
           line-height: 1;
           color: #f4fbff;
-          text-shadow: 0 0 12px rgba(121,219,255,.45);
+          text-shadow: 0 0 8px rgba(121,219,255,.36);
+        }
+        .hero-lock-badge {
+          position: absolute;
+          right: 12px;
+          bottom: 12px;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255,255,255,.14);
+          background: rgba(5,9,14,.88);
+          box-shadow: 0 0 18px rgba(0,0,0,.35);
+        }
+        .hero-lock-badge.ok {
+          border-color: rgba(107, 230, 156, .5);
+        }
+        .hero-lock-badge.warn {
+          border-color: rgba(255, 146, 100, .6);
+        }
+        .hero-lock-badge.actionable {
+          cursor: pointer;
+        }
+        .hero-lock-badge.actionable:active {
+          transform: scale(.96);
+        }
+        .hero-lock-badge ha-icon {
+          width: 20px;
+          height: 20px;
+          color: #fff;
         }
         .hero-service-item ha-icon {
           width: 20px;
@@ -1387,6 +1515,67 @@ class Byd3DCard extends HTMLElement {
         }
         .hero-service-item.actionable:active {
           transform: scale(.96);
+        }
+        .dialog-backdrop {
+          position: absolute;
+          inset: 0;
+          z-index: 20;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+          background: rgba(2, 6, 16, .78);
+          backdrop-filter: blur(8px);
+        }
+        .dialog-card {
+          width: min(100%, 380px);
+          border-radius: 24px;
+          padding: 22px 20px;
+          background: linear-gradient(180deg, rgba(8, 13, 22, .96), rgba(5, 9, 15, .98));
+          border: 1px solid rgba(255,255,255,.12);
+          box-shadow: 0 24px 80px rgba(0,0,0,.4);
+        }
+        .dialog-title {
+          margin: 0 0 12px;
+          font-size: 18px;
+          line-height: 1.2;
+          font-weight: 800;
+          color: #f8fbff;
+          text-align: center;
+        }
+        .dialog-text {
+          margin: 0 0 18px;
+          font-size: 14px;
+          line-height: 1.6;
+          color: rgba(235,245,255,.86);
+          text-align: center;
+        }
+        .dialog-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .dialog-btn {
+          appearance: none;
+          border: 0;
+          border-radius: 14px;
+          padding: 11px 14px;
+          font-weight: 700;
+          font-size: 14px;
+          cursor: pointer;
+          transition: transform .16s ease, filter .16s ease;
+        }
+        .dialog-btn:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.05);
+        }
+        .dialog-btn.cancel {
+          background: rgba(255,255,255,.08);
+          color: #e8f1ff;
+        }
+        .dialog-btn.confirm {
+          background: linear-gradient(180deg, #5cb0ff, #1e5fbf);
+          color: #fff;
         }
         .hero-service-item.tone-cold {
           border-color: rgba(93,201,255,.52);
@@ -1450,6 +1639,7 @@ class Byd3DCard extends HTMLElement {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          text-align: center;
         }
         .alert-marquee {
           flex: 1;
@@ -1797,6 +1987,22 @@ class Byd3DCard extends HTMLElement {
           cursor: pointer;
           box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
           text-align: center;
+          transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+        .action-btn.active {
+          border-color: rgba(126,198,241,.92);
+          background: linear-gradient(180deg, rgba(35,112,175,.96), rgba(18,61,99,.95));
+          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .action-btn.climate-on.active {
+          border-color: rgba(255,126,126,.92);
+          background: linear-gradient(180deg, rgba(255,95,95,.96), rgba(180,50,50,.95));
+          box-shadow: 0 0 18px rgba(255,95,95,.2), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .action-btn.climate-off.active {
+          border-color: rgba(126,198,241,.92);
+          background: linear-gradient(180deg, rgba(35,112,175,.96), rgba(18,61,99,.95));
+          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.12);
         }
         .action-btn:active { transform: translateY(1px); }
         .action-btn ha-icon { width: 19px; height: 19px; }
@@ -2044,7 +2250,17 @@ class Byd3DCard extends HTMLElement {
         const action = btn.getAttribute("data-action");
         if (!key || !action) return;
         if (action === "toggle") this._callToggle(key);
-        if (action === "press") this._callButton(key);
+        if (action === "lock") this._callLock(key, false);
+        if (action === "unlock") this._showConfirmation("unlock", { key });
+        if (action === "climate_on") this._callClimatePower(true);
+        if (action === "climate_off") this._callClimatePower(false);
+        if (action === "press") {
+          this._callButton(key);
+          if (this._buttonFeedbacks) {
+            this._buttonFeedbacks.set(key, { text: this._t("executed"), until: Date.now() + 2000 });
+          }
+          this._render();
+        }
       });
     });
 
@@ -2110,6 +2326,44 @@ class Byd3DCard extends HTMLElement {
         this._flashButtonFeedback(item);
         const indicatorId = item.getAttribute("data-indicator");
         this._handleServiceIndicatorAction(indicatorId);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll(".hero-lock-badge").forEach((badge) => {
+      badge.addEventListener("click", () => {
+        this._flashButtonFeedback(badge);
+        const lockState = this._state("lock")?.state;
+        if (!lockState) return;
+
+        const isCurrentlyLocked = lockState === "locked" || lockState === "off";
+        if (isCurrentlyLocked) {
+          this._showConfirmation("unlock", { key: "lock" });
+          return;
+        }
+
+        this._callLock("lock", false);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-dialog-backdrop]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) this._hideConfirmation();
+      });
+    });
+
+    this.shadowRoot.querySelectorAll(".dialog-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-dialog-action");
+        if (action === "cancel") {
+          this._hideConfirmation();
+          return;
+        }
+        if (action === "confirm") {
+          if (this._confirmation?.type === "unlock") {
+            this._callLock(this._confirmation.key, true);
+          }
+          this._hideConfirmation();
+        }
       });
     });
 
@@ -2330,48 +2584,48 @@ class Byd3DCardEditor extends HTMLElement {
         <div class="editor-glow"></div>
         <div class="editor">
           <div class="head">
-            <h3>${FALLBACK_I18N.settings_title}</h3>
-            <p>${FALLBACK_I18N.settings_hint}</p>
+            <h3>${this._t("settings_title")}</h3>
+            <p>${this._t("settings_hint")}</p>
           </div>
 
           <section class="group">
-            <div class="group-title">Vehicle Profile</div>
+            <div class="group-title">${this._t("settings_vehicle_profile")}</div>
             <div class="profiles">${this._renderProfileOptions()}</div>
           </section>
 
           <section class="group">
             <div class="field">
-              <label>${FALLBACK_I18N.settings_card_title}</label>
+              <label>${this._t("settings_card_title")}</label>
               <input id="title" type="text" value="${this._config.title || ""}" placeholder="BYD ATTO 3" />
             </div>
             <div class="field">
-              <label>${FALLBACK_I18N.settings_prefix}</label>
+              <label>${this._t("settings_prefix")}</label>
               <input id="prefix" type="text" list="prefix_suggestions" value="${this._config.entity_prefix || ""}" placeholder="byd_atto_3" />
               <datalist id="prefix_suggestions"></datalist>
-              <small>${FALLBACK_I18N.settings_prefix_help}</small>
+              <small>${this._t("settings_prefix_help")}</small>
             </div>
           </section>
 
           <section class="group">
-            <div class="group-title">${FALLBACK_I18N.settings_language}</div>
+            <div class="group-title">${this._t("settings_language")}</div>
             <div class="lang-grid">${this._renderLanguageOptions()}</div>
           </section>
 
           <section class="group">
             <div class="field">
-              <label>${FALLBACK_I18N.settings_image_url}</label>
+              <label>${this._t("settings_image_url")}</label>
               <input id="image_url" type="text" value="${this._config.image_url || ""}" placeholder="/local/bydatoo3.png" />
             </div>
             <div class="field">
-              <label>${FALLBACK_I18N.settings_image_base_path}</label>
+              <label>${this._t("settings_image_base_path")}</label>
               <input id="image_base_path" type="text" value="${this._config.image_base_path || ""}" placeholder="/local/byd-card/pic" />
             </div>
             <div class="field">
-              <label>${FALLBACK_I18N.settings_i18n_base_path}</label>
+              <label>${this._t("settings_i18n_base_path")}</label>
               <input id="i18n_base_path" type="text" value="${this._config.i18n_base_path || ""}" placeholder="/local/byd-card/i18n" />
             </div>
             <div class="field">
-              <label>${FALLBACK_I18N.settings_refresh_interval}</label>
+              <label>${this._t("settings_refresh_interval")}</label>
               <input
                 id="refresh_interval_seconds"
                 type="number"
@@ -2380,24 +2634,24 @@ class Byd3DCardEditor extends HTMLElement {
                 step="1"
                 value="${this._normalizeRefreshInterval(this._config.refresh_interval_seconds)}"
               />
-              <small>${FALLBACK_I18N.settings_refresh_interval_hint}</small>
+              <small>${this._t("settings_refresh_interval_hint")}</small>
             </div>
           </section>
 
           <section class="group">
-            <div class="group-title">${FALLBACK_I18N.settings_categories}</div>
+            <div class="group-title">${this._t("settings_categories")}</div>
             <div class="toggles">
-              <label class="toggle-chip"><input id="show_climate" type="checkbox" ${this._config.show_climate ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_climate}</span></label>
-              <label class="toggle-chip"><input id="show_vehicle" type="checkbox" ${this._config.show_vehicle ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_vehicle}</span></label>
-              <label class="toggle-chip"><input id="show_tires" type="checkbox" ${this._config.show_tires ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_tires}</span></label>
-              <label class="toggle-chip"><input id="show_actions" type="checkbox" ${this._config.show_actions ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_actions}</span></label>
-              <label class="toggle-chip"><input id="show_location" type="checkbox" ${this._config.show_location ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_location}</span></label>
+              <label class="toggle-chip"><input id="show_climate" type="checkbox" ${this._config.show_climate ? "checked" : ""}/> <span>${this._t("settings_show_climate")}</span></label>
+              <label class="toggle-chip"><input id="show_vehicle" type="checkbox" ${this._config.show_vehicle ? "checked" : ""}/> <span>${this._t("settings_show_vehicle")}</span></label>
+              <label class="toggle-chip"><input id="show_tires" type="checkbox" ${this._config.show_tires ? "checked" : ""}/> <span>${this._t("settings_show_tires")}</span></label>
+              <label class="toggle-chip"><input id="show_actions" type="checkbox" ${this._config.show_actions ? "checked" : ""}/> <span>${this._t("settings_show_actions")}</span></label>
+              <label class="toggle-chip"><input id="show_location" type="checkbox" ${this._config.show_location ? "checked" : ""}/> <span>${this._t("settings_show_location")}</span></label>
             </div>
           </section>
 
           <section class="group">
-            <div class="group-title">${FALLBACK_I18N.settings_category_order}</div>
-            <div class="order-hint">${FALLBACK_I18N.settings_category_order_hint}</div>
+            <div class="group-title">${this._t("settings_category_order")}</div>
+            <div class="order-hint">${this._t("settings_category_order_hint")}</div>
             <div class="category-order-list">
               ${this._renderCategoryOrderOptions()}
             </div>
