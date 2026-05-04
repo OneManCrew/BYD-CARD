@@ -167,8 +167,13 @@ const ENTITY_HINTS = {
   flash_lights: { domains: ["button"], suffixes: ["flash_lights"] },
   find_car: { domains: ["button"], suffixes: ["find_car"] },
   close_windows: { domains: ["button"], suffixes: ["close_windows"] },
-  driver_seat_heat: { domains: ["select"], suffixes: ["driver_seat_heat", "driver_seat_heating"] },
-  passenger_seat_heat: { domains: ["select"], suffixes: ["passenger_seat_heat", "passenger_seat_heating"] },
+  driver_seat_heat: { domains: ["select"], suffixes: ["driver_seat_heat", "driver_seat_heating", "driver_seat_ventilation"] },
+  driver_seat_ventilation: { domains: ["select"], suffixes: ["driver_seat_ventilation"] },
+  passenger_seat_heat: {
+    domains: ["select"],
+    suffixes: ["passenger_seat_heat", "passenger_seat_heating", "passenger_seat_ventilation"],
+  },
+  passenger_seat_ventilation: { domains: ["select"], suffixes: ["passenger_seat_ventilation"] },
   rear_left_seat_heat: { domains: ["select"], suffixes: ["rear_left_seat_heat", "rear_left_seat_heating"] },
   rear_right_seat_heat: { domains: ["select"], suffixes: ["rear_right_seat_heat", "rear_right_seat_heating"] },
   tirepressure_system: { domains: ["binary_sensor"], suffixes: ["tirepressure_system"] },
@@ -197,6 +202,8 @@ const DEFAULT_CONFIG = {
   show_tires: true,
   show_actions: true,
   show_climate: true,
+  show_seat_cooling: false,
+  seat_passenger_mode: "heat",
   show_vehicle: true,
   show_location: true,
   refresh_interval_seconds: 25,
@@ -253,13 +260,20 @@ const FALLBACK_I18N = {
   close_windows: "סגור חלונות",
   open_map: "פתח מפה",
   seat_heating: "חימום מושבים",
+  seat_climate: "מצב מושבים",
   seat_driver: "נהג",
   seat_passenger: "נוסע",
   seat_rear_left: "אחורי שמאל",
   seat_rear_right: "אחורי ימין",
   level_off: "כבוי",
   level_low: "נמוך",
+  level_medium: "בינוני",
   level_high: "גבוה",
+  level_cool: "קירור",
+  level_cooling: "קירור",
+  level_heat: "חימום",
+  level_heating: "חימום",
+  level_ventilation: "אוורור",
   front_left: "קדמי שמאל",
   front_right: "קדמי ימין",
   rear_left: "אחורי שמאל",
@@ -286,6 +300,10 @@ const FALLBACK_I18N = {
   settings_show_tires: "הצג צמיגים",
   settings_show_actions: "הצג פעולות מהירות",
   settings_show_climate: "הצג אקלים",
+  settings_show_seat_cooling: "הצג קירור מושבים",
+  settings_seat_mode: "מצב מושב נוסע",
+  seat_mode_heat: "חימום",
+  seat_mode_cool: "קירור",
   settings_show_vehicle: "הצג רכב",
   settings_show_location: "הצג מיקום",
   climate_controls: "שליטת מזגן",
@@ -405,6 +423,14 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeSeatPassengerMode(value, fallbackShowCooling = false) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "cool" || raw === "cooling") return "cool";
+  if (raw === "heat" || raw === "heating") return "heat";
+  if (raw === "both") return "both";
+  return fallbackShowCooling ? "cool" : "heat";
+}
+
 function fireConfigChanged(element, config) {
   const event = new Event("config-changed", { bubbles: true, composed: true });
   event.detail = { config };
@@ -426,6 +452,11 @@ class Byd3DCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
+    this._config.seat_passenger_mode = normalizeSeatPassengerMode(
+      config?.seat_passenger_mode,
+      Boolean(config?.show_seat_cooling)
+    );
+    this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
@@ -498,7 +529,9 @@ class Byd3DCard extends HTMLElement {
       "ac_switch",
       "battery_heat",
       "driver_seat_heat",
+      "driver_seat_ventilation",
       "passenger_seat_heat",
+      "passenger_seat_ventilation",
       "rear_left_seat_heat",
       "rear_right_seat_heat",
       "doors",
@@ -656,7 +689,9 @@ class Byd3DCard extends HTMLElement {
       "ac_switch",
       "battery_heat",
       "driver_seat_heat",
+      "driver_seat_ventilation",
       "passenger_seat_heat",
+      "passenger_seat_ventilation",
       "rear_left_seat_heat",
       "rear_right_seat_heat",
       "tire_fl",
@@ -695,6 +730,14 @@ class Byd3DCard extends HTMLElement {
     return objectId.replace(/_(battery_level|elec_percent)$/, "");
   }
 
+  _seatPassengerMode() {
+    return normalizeSeatPassengerMode(this._config?.seat_passenger_mode, Boolean(this._config?.show_seat_cooling));
+  }
+
+  _isSeatCoolingEnabled() {
+    return this._seatPassengerMode() === "cool" || this._seatPassengerMode() === "both";
+  }
+
   _resolveEntity(logicalKey) {
     const override = this._config.entities?.[logicalKey];
     if (override) return override;
@@ -702,12 +745,13 @@ class Byd3DCard extends HTMLElement {
 
     const hint = ENTITY_HINTS[logicalKey];
     if (!hint) return null;
+    const suffixes = this._preferredSuffixesForLogicalKey(logicalKey, hint.suffixes);
     const prefix = this._resolvePrefix();
     const all = this._hass.states;
 
     if (prefix) {
       for (const domain of hint.domains) {
-        for (const suffix of hint.suffixes) {
+        for (const suffix of suffixes) {
           const candidate = `${domain}.${prefix}_${suffix}`;
           if (all[candidate]) return candidate;
         }
@@ -718,12 +762,31 @@ class Byd3DCard extends HTMLElement {
     const ids = Object.keys(all);
     for (const domain of hint.domains) {
       const pool = ids.filter((id) => id.startsWith(`${domain}.`));
-      for (const suffix of hint.suffixes) {
+      for (const suffix of suffixes) {
         const found = pool.find((id) => id.endsWith(`_${suffix}`));
         if (found) return found;
       }
     }
     return null;
+  }
+
+  _preferredSuffixesForLogicalKey(logicalKey, suffixes) {
+    const ordered = Array.isArray(suffixes) ? [...suffixes] : [];
+    const coolingMap = {
+      driver_seat_heat: "driver_seat_ventilation",
+      passenger_seat_heat: "passenger_seat_ventilation",
+    };
+    const coolingSuffix = coolingMap[logicalKey];
+    if (!coolingSuffix || !ordered.includes(coolingSuffix)) return ordered;
+    const withoutCooling = ordered.filter((suffix) => suffix !== coolingSuffix);
+    const mode = this._seatPassengerMode();
+    if (mode === "both") {
+      return ordered; // include both
+    }
+    if (mode === "cool") {
+      return [coolingSuffix, ...withoutCooling];
+    }
+    return [...withoutCooling, coolingSuffix];
   }
 
   _profileImage(profileKey) {
@@ -821,13 +884,71 @@ class Byd3DCard extends HTMLElement {
       "mid",
       "middle",
       "high",
+      "cool",
+      "cooling",
+      "vent",
+      "ventilation",
+      "fan",
       "נמוך",
       "בינוני",
       "גבוה",
+      "קירור",
+      "אוורור",
       "חזק",
     ]);
     if (active.has(value)) return true;
     return this._isTruthyState(value);
+  }
+
+  _seatControlOptions(seatState) {
+    const rawOptions = Array.isArray(seatState?.attributes?.options) ? seatState.attributes.options : [];
+    const normalized = [];
+    for (const option of rawOptions) {
+      const value = String(option || "").trim();
+      if (!value) continue;
+      const lower = value.toLowerCase();
+      if (normalized.some((entry) => entry.toLowerCase() === lower)) continue;
+      normalized.push(value);
+    }
+    const showSeatCooling = this._isSeatCoolingEnabled();
+    const filtered = normalized.filter((option) => showSeatCooling || !this._isSeatCoolingOption(option));
+    if (filtered.length) return filtered;
+    if (normalized.length) return [];
+    return ["off", "low", "high"];
+  }
+
+  _isSeatCoolingOption(option) {
+    const normalized = String(option || "").trim().toLowerCase();
+    if (!normalized) return false;
+    return ["cool", "cooling", "max_cool", "cold", "vent", "ventilation", "fan", "קירור", "אוורור"].includes(normalized);
+  }
+
+  _seatOptionLabel(option) {
+    const normalized = String(option || "").trim().toLowerCase();
+    const translated = this._t(`level_${normalized}`);
+    if (translated && translated !== `level_${normalized}`) return translated;
+    return String(option || "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  _seatOptionTone(option) {
+    const normalized = String(option || "").trim().toLowerCase();
+    if (!normalized) return "";
+    if (["off", "0", "none", "none_selected", "כבוי"].includes(normalized)) return "off";
+    if (["low", "1"].includes(normalized)) return "low";
+    if (["medium", "mid", "middle", "2"].includes(normalized)) return "medium";
+    if (
+      ["high", "3", "heat", "heating", "max_heat", "warm", "hot", "חימום", "גבוה", "חזק"].includes(normalized)
+    ) {
+      return "high";
+    }
+    if (
+      ["cool", "cooling", "max_cool", "cold", "vent", "ventilation", "fan", "קירור", "אוורור"].includes(normalized)
+    ) {
+      return "cool";
+    }
+    return normalized.replace(/[^a-z0-9_-]/g, "-");
   }
 
   async _loadTranslations() {
@@ -1043,16 +1164,19 @@ class Byd3DCard extends HTMLElement {
     const current = String(
       (overrideIsFresh ? override.option : seatState.state) || "off"
     ).toLowerCase();
-    const options = ["off", "low", "high"];
-    const levelLabel = (opt) => this._t(`level_${opt}`);
+    const options = this._seatControlOptions(seatState);
+    if (!options.length) return "";
+    const isCooling = logicalKey === "passenger_seat_ventilation" || this._resolveEntity(logicalKey)?.includes("ventilation");
     return `
-      <div class="seat-control">
+      <div class="seat-control ${isCooling ? "seat-cooling" : ""}">
         <div class="seat-title">${label}</div>
         <div class="seat-levels">
           ${options
             .map((opt) => {
-              const active = current === opt ? "active" : "";
-              return `<button class="seat-level ${active} level-${opt}" data-seat="${logicalKey}" data-option="${opt}">${levelLabel(opt)}</button>`;
+              const normalized = String(opt || "").trim().toLowerCase();
+              const active = current === normalized ? "active" : "";
+              const tone = this._seatOptionTone(opt);
+              return `<button class="seat-level ${active} level-${tone}" data-seat="${logicalKey}" data-option="${opt}">${this._seatOptionLabel(opt)}</button>`;
             })
             .join("")}
         </div>
@@ -1130,7 +1254,25 @@ class Byd3DCard extends HTMLElement {
     const svsState = this._state("svs");
     const seatHeatSection = [
       this._renderSeatHeatControl("driver_seat_heat", this._t("seat_driver")),
-      this._renderSeatHeatControl("passenger_seat_heat", this._t("seat_passenger")),
+      (() => {
+        const passengerHeat = this._renderSeatHeatControl("passenger_seat_heat", this._t("seat_passenger"));
+        if (this._seatPassengerMode() === "both") {
+          const passengerCool = this._renderSeatHeatControl(
+            "passenger_seat_ventilation",
+            this._t("seat_passenger") + " (" + this._t("seat_mode_cool") + ")"
+          );
+          return passengerHeat + passengerCool;
+        }
+        return passengerHeat;
+      })(),
+      (() => {
+        if (this._seatPassengerMode() !== "both") return "";
+        const driverCool = this._renderSeatHeatControl(
+          "driver_seat_ventilation",
+          this._t("seat_driver") + " (" + this._t("seat_mode_cool") + ")"
+        );
+        return driverCool;
+      })(),
       this._renderSeatHeatControl("rear_left_seat_heat", this._t("seat_rear_left")),
       this._renderSeatHeatControl("rear_right_seat_heat", this._t("seat_rear_right")),
     ]
@@ -1168,6 +1310,7 @@ class Byd3DCard extends HTMLElement {
       })
       .filter((v) => v !== undefined && v !== null && String(v).trim() !== "");
     const seatHeatActive = seatHeatStates.some((v) => this._isSeatHeatActive(v));
+    const seatHasCooling = this._isSeatCoolingEnabled() && seatHeatStates.some((v) => this._isSeatCoolingOption(v));
 
     const battery = clamp(toNumber(batteryState?.state) ?? 0, 0, 100);
     const range = toNumber(rangeState?.state);
@@ -1322,7 +1465,10 @@ class Byd3DCard extends HTMLElement {
       pushIndicator("battery_heat", "mdi:heat-wave", this._t("battery_heat"), "hot", canToggleBatteryHeat);
     }
     if (seatHeatActive) {
-      pushIndicator("seat_heat", "mdi:car-seat-heater", this._t("seat_heating"), "hot", canControlSeatHeat);
+      const seatTone = seatHasCooling ? "cold" : "hot";
+      const seatIcon = seatHasCooling ? "mdi:snowflake" : "mdi:car-seat-heater";
+      const seatLabel = seatHasCooling ? this._t("seat_climate") : this._t("seat_heating");
+      pushIndicator("seat_heat", seatIcon, seatLabel, seatTone, canControlSeatHeat);
     }
     if (doorsState?.state === "on") {
       pushIndicator("doors_open", "mdi:car-door", this._t("doors"), "warn");
@@ -1440,7 +1586,7 @@ class Byd3DCard extends HTMLElement {
               seatHeatSection
                 ? `
             <div class="seat-wrap">
-              <div class="seat-header"><ha-icon icon="mdi:car-seat-heater"></ha-icon><span>${this._t("seat_heating")}</span></div>
+              <div class="seat-header"><ha-icon icon="mdi:car-seat-heater"></ha-icon><span>${this._isSeatCoolingEnabled() ? this._t("seat_climate") : this._t("seat_heating")}</span></div>
               <div class="seat-grid">${seatHeatSection}</div>
             </div>
             `
@@ -2392,6 +2538,12 @@ class Byd3DCard extends HTMLElement {
           cursor: pointer;
           text-align: center;
         }
+        .seat-level.active {
+          border-color: rgba(156,197,230,.72);
+          background: linear-gradient(180deg, rgba(133,161,191,.45), rgba(112,139,167,.36));
+          color: #f2f8ff;
+          box-shadow: 0 0 16px rgba(143,186,225,.26), inset 0 1px 0 rgba(255,255,255,.2);
+        }
         .seat-level.active.level-off {
           border-color: rgba(156,197,230,.72);
           background: linear-gradient(180deg, rgba(133,161,191,.45), rgba(112,139,167,.36));
@@ -2409,6 +2561,36 @@ class Byd3DCard extends HTMLElement {
           background: rgba(255,96,88,.28);
           color: #ffb2ad;
           box-shadow: 0 0 16px rgba(255,96,88,.32);
+        }
+        .seat-level.active.level-medium {
+          border-color: rgba(255,160,104,.65);
+          background: rgba(255,160,104,.24);
+          color: #ffd8b5;
+          box-shadow: 0 0 15px rgba(255,160,104,.3);
+        }
+        .seat-level.active.level-cool {
+          border-color: rgba(115,186,255,.72);
+          background: rgba(86,165,244,.24);
+          color: #cae8ff;
+          box-shadow: 0 0 16px rgba(86,165,244,.32);
+        }
+        .seat-control.seat-cooling .seat-level.active.level-high {
+          border-color: rgba(115,186,255,.72);
+          background: rgba(86,165,244,.24);
+          color: #cae8ff;
+          box-shadow: 0 0 16px rgba(86,165,244,.32);
+        }
+        .seat-control.seat-cooling .seat-level.active.level-medium {
+          border-color: rgba(115,186,255,.65);
+          background: rgba(86,165,244,.24);
+          color: #ffd8b5;
+          box-shadow: 0 0 15px rgba(115,186,255,.3);
+        }
+        .seat-control.seat-cooling .seat-level.active.level-low {
+          border-color: rgba(115,186,255,.6);
+          background: rgba(86,165,244,.2);
+          color: #cae8ff;
+          box-shadow: 0 0 14px rgba(86,165,244,.28);
         }
         .climate-controls {
           margin-top: 10px;
@@ -2730,6 +2912,11 @@ class Byd3DCard extends HTMLElement {
 class Byd3DCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
+    this._config.seat_passenger_mode = normalizeSeatPassengerMode(
+      config?.seat_passenger_mode,
+      Boolean(config?.show_seat_cooling)
+    );
+    this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
@@ -2921,6 +3108,26 @@ class Byd3DCardEditor extends HTMLElement {
       .join("");
   }
 
+  _renderSeatModeOptions() {
+    const mode = normalizeSeatPassengerMode(this._config?.seat_passenger_mode, Boolean(this._config?.show_seat_cooling));
+    const options = [
+      { key: "heat", icon: "mdi:car-seat-heater", label: this._t("seat_mode_heat") },
+      { key: "cool", icon: "mdi:snowflake", label: this._t("seat_mode_cool") },
+      { key: "both", icon: "mdi:car-seat", label: this._t("seat_mode_both") },
+    ];
+    return options
+      .map((opt) => {
+        const active = mode === opt.key ? "active" : "";
+        return `
+          <button class="seat-mode-btn ${active}" data-seat-mode="${opt.key}" title="${opt.label}">
+            <ha-icon icon="${opt.icon}"></ha-icon>
+            <span>${opt.label}</span>
+          </button>
+        `;
+      })
+      .join("");
+  }
+
   _emitChange(partial) {
     this._config = { ...this._config, ...partial };
     fireConfigChanged(this, this._config);
@@ -3025,6 +3232,10 @@ class Byd3DCardEditor extends HTMLElement {
             <div class="group-title">${this._t("settings_categories")}</div>
             <div class="toggles">
               <label class="toggle-chip"><input id="show_climate" type="checkbox" ${this._config.show_climate ? "checked" : ""}/> <span>${this._t("settings_show_climate")}</span></label>
+              <div class="seat-mode-picker">
+                <div class="seat-mode-label">${this._t("settings_seat_mode")}</div>
+                <div class="seat-mode-grid">${this._renderSeatModeOptions()}</div>
+              </div>
               <label class="toggle-chip"><input id="show_vehicle" type="checkbox" ${this._config.show_vehicle ? "checked" : ""}/> <span>${this._t("settings_show_vehicle")}</span></label>
               <label class="toggle-chip"><input id="show_tires" type="checkbox" ${this._config.show_tires ? "checked" : ""}/> <span>${this._t("settings_show_tires")}</span></label>
               <label class="toggle-chip"><input id="show_actions" type="checkbox" ${this._config.show_actions ? "checked" : ""}/> <span>${this._t("settings_show_actions")}</span></label>
@@ -3284,6 +3495,50 @@ class Byd3DCardEditor extends HTMLElement {
           color: rgba(203,223,242,.76);
           pointer-events: none;
         }
+        .seat-mode-picker {
+          border: 1px solid rgba(157,190,220,.22);
+          border-radius: 12px;
+          padding: 10px 11px;
+          background:
+            radial-gradient(circle at 22% 0%, rgba(99,170,255,.16), transparent 42%),
+            linear-gradient(180deg, rgba(31,46,66,.86), rgba(12,18,28,.9));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.15),
+            inset 0 -10px 16px rgba(0,0,0,.42),
+            0 8px 18px rgba(0,0,0,.24);
+        }
+        .seat-mode-label {
+          font-size: 12px;
+          font-weight: 800;
+          color: rgba(226,239,252,.85);
+          margin-bottom: 8px;
+        }
+        .seat-mode-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .seat-mode-btn {
+          border: 1px solid rgba(157,190,220,.2);
+          background: linear-gradient(180deg, rgba(20,29,40,.86), rgba(15,21,30,.9));
+          border-radius: 12px;
+          min-height: 44px;
+          color: #e8f3fc;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          cursor: pointer;
+          transition: transform .15s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+        .seat-mode-btn:hover { transform: translateY(-1px); }
+        .seat-mode-btn ha-icon { --mdc-icon-size: 18px; }
+        .seat-mode-btn span { font-size: 13px; font-weight: 700; }
+        .seat-mode-btn.active {
+          border-color: #23bcff;
+          box-shadow: 0 0 0 1px rgba(35,188,255,.65) inset, 0 12px 24px rgba(35,188,255,.14);
+          background: linear-gradient(180deg, rgba(0,184,255,.19), rgba(0,184,255,.04));
+        }
         .toggle-chip {
           position: relative;
           overflow: hidden;
@@ -3356,6 +3611,10 @@ class Byd3DCardEditor extends HTMLElement {
 
     const onChange = () =>
       this._emitChange({
+        seat_passenger_mode: normalizeSeatPassengerMode(
+          this._config?.seat_passenger_mode,
+          Boolean(this._config?.show_seat_cooling)
+        ),
         refresh_interval_seconds: this._normalizeRefreshInterval(
           this.shadowRoot.getElementById("refresh_interval_seconds").value
         ),
@@ -3367,6 +3626,9 @@ class Byd3DCardEditor extends HTMLElement {
         image_base_path: this.shadowRoot.getElementById("image_base_path").value.trim() || "/local/byd-card/pic",
         i18n_base_path: this.shadowRoot.getElementById("i18n_base_path").value.trim() || "/local/byd-card/i18n",
         show_climate: this.shadowRoot.getElementById("show_climate").checked,
+        show_seat_cooling:
+          normalizeSeatPassengerMode(this._config?.seat_passenger_mode, Boolean(this._config?.show_seat_cooling)) ===
+          "cool",
         show_vehicle: this.shadowRoot.getElementById("show_vehicle").checked,
         show_tires: this.shadowRoot.getElementById("show_tires").checked,
         show_actions: this.shadowRoot.getElementById("show_actions").checked,
@@ -3405,6 +3667,18 @@ class Byd3DCardEditor extends HTMLElement {
         const key = button.getAttribute("data-lang");
         if (!key) return;
         this._emitChange({ language: key });
+        this._render();
+      });
+    });
+
+    this.shadowRoot.querySelectorAll(".seat-mode-btn").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.getAttribute("data-seat-mode");
+        if (mode !== "heat" && mode !== "cool" && mode !== "both") return;
+        this._emitChange({
+          seat_passenger_mode: mode,
+          show_seat_cooling: mode === "cool" || mode === "both",
+        });
         this._render();
       });
     });

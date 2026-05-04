@@ -37,6 +37,9 @@
   "seat_heating": "Chauffage des sièges",
   "seat_driver": "Conducteur",
   "seat_passenger": "Passager",
+  "seat_mode_heat": "Chauffage",
+  "seat_mode_cool": "Refroidissement",
+  "seat_mode_both": "Les deux",
   "seat_rear_left": "Arrière gauche",
   "seat_rear_right": "Arrière droite",
   "level_off": "Off",
@@ -90,5 +93,6 @@
   "alert_svs": "SVS",
   "settings_vehicle_profile": "Profil du véhicule",
   "aria_vehicle_categories": "Catégories de véhicule",
-  "rapid_tire_leak": "Fuite rapide du pneu"
+  "rapid_tire_leak": "Fuite rapide du pneu",
+  "settings_seat_mode": "Mode siège passager"
 }

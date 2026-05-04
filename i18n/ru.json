@@ -37,6 +37,9 @@
   "seat_heating": "Подогрев сидений",
   "seat_driver": "Водитель",
   "seat_passenger": "Пассажир",
+  "seat_mode_heat": "Нагрев",
+  "seat_mode_cool": "Охлаждение",
+  "seat_mode_both": "Оба",
   "seat_rear_left": "Заднее левое",
   "seat_rear_right": "Заднее правое",
   "level_off": "Выкл",
@@ -90,5 +93,6 @@
   "alert_svs": "SVS",
   "settings_vehicle_profile": "Профиль автомобиля",
   "aria_vehicle_categories": "Категории автомобиля",
-  "rapid_tire_leak": "Быстрая утечка воздуха"
+  "rapid_tire_leak": "Быстрая утечка воздуха",
+  "settings_seat_mode": "Режим пассажирского сиденья"
 }

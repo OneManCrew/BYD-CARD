@@ -90,5 +90,9 @@
   "alert_svs": "SVS",
   "settings_vehicle_profile": "Vehicle Profile",
   "aria_vehicle_categories": "Vehicle categories",
-  "rapid_tire_leak": "Rapid tire leak"
+  "rapid_tire_leak": "Rapid tire leak",
+  "seat_mode_heat": "Heat",
+  "seat_mode_cool": "Cool",
+  "seat_mode_both": "Both",
+  "settings_seat_mode": "Passenger seat mode"
 }

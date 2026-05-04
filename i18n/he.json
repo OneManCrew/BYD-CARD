@@ -89,5 +89,9 @@
   "alert_svs": "SVS",
   "settings_vehicle_profile": "פרופיל רכב",
   "aria_vehicle_categories": "קטגוריות רכב",
-  "rapid_tire_leak": "דליפת אוויר מהירה"
+  "rapid_tire_leak": "דליפת אוויר מהירה",
+  "seat_mode_heat": "חימום",
+  "seat_mode_cool": "קירור",
+  "seat_mode_both": "שניהם",
+  "settings_seat_mode": "מצב מושב נוסע"
 }
