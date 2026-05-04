@@ -2970,7 +2970,7 @@ class Byd3DCardEditor extends HTMLElement {
   _categoryLabel(key) {
     const def = CATEGORY_DEFS.find((item) => item.key === key);
     if (!def) return key;
-    return FALLBACK_I18N[def.labelKey] || def.key;
+    return this._t(def.labelKey);
   }
 
   _renderCategoryOrderOptions() {
