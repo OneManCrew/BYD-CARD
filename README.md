@@ -46,17 +46,27 @@ Recommended order:
 type: custom:byd-3d-card
 vehicle_profile: atto3
 title: Moshiko BYD ATTO 3
-title_font_size: 46
+title_font_size: 35
 entity_prefix: byd_atto_3
+image_url: ""
 image_base_path: /local/byd-card/pic
-language: en
 i18n_base_path: /local/byd-card/i18n
-show_climate: true
-show_vehicle: true
 show_tires: true
 show_actions: true
+show_climate: true
+show_vehicle: true
 show_location: true
 refresh_interval_seconds: 25
+language: he
+category_order:
+  - summary
+  - climate
+  - vehicle
+  - tires
+  - location
+  - actions
+entities: {}
+
 ```
 
 ## Files
