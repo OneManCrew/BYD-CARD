@@ -84,25 +84,87 @@ refresh_interval_seconds: 25
 |---|---|
 | ![SEAL](pic/seal.png) | ![SEALION 7](pic/sealion.png) |
 
-## UI screenshots
+## UI screenshots (with explanation)
 
-The dashboard screenshots you sent are not in the repository yet as image files, so they cannot be rendered in README right now.
+### 1) Overview + Summary
+![Overview and Summary](docs/screenshots/01-overview-summary.png)
 
-Add them into:
+What it shows:
+- Hero image + battery status badge
+- Alert ribbon (single issue example)
+- 6 category tabs
+- Summary panel with power, range, battery bar and key metrics
 
-- `docs/screenshots/`
+### 2) Climate
+![Climate category](docs/screenshots/02-climate-view.png)
 
-Suggested names:
+What it shows:
+- Climate metrics (A/C, battery heat, cabin/exterior temperatures)
+- Climate controls grid (`on/off`, temp up/down, preset modes)
+- Seat heating controls with level buttons
+- Active service icons in hero area
 
-- `docs/screenshots/01-summary.png`
-- `docs/screenshots/02-climate.png`
-- `docs/screenshots/03-vehicle.png`
-- `docs/screenshots/04-actions.png`
-- `docs/screenshots/05-tires.png`
-- `docs/screenshots/06-editor-full.png`
-- `docs/screenshots/07-editor-categories.png`
+### 3) Vehicle
+![Vehicle category](docs/screenshots/03-vehicle-view.png)
 
-Then they can be embedded directly in this README.
+What it shows:
+- Vehicle status cards:
+  - Doors
+  - Windows
+  - Lock
+  - Online
+  - Speed
+  - Odometer
+
+### 4) Quick actions
+![Quick actions category](docs/screenshots/04-quick-actions-view.png)
+
+What it shows:
+- Quick control buttons:
+  - Lock / Unlock
+  - A/C On / A/C Off
+  - Battery heat
+  - Flash lights
+  - Find car
+  - Close windows
+- Active button highlighting and visual feedback
+
+### 5) Tires
+![Tires category](docs/screenshots/05-tires-view.png)
+
+What it shows:
+- Tire pressure per wheel in PSI
+- Color-based status:
+  - Green = normal
+  - Orange = warning
+  - Red = critical
+
+### 6) Editor main view
+![Editor main view](docs/screenshots/06-editor-main.png)
+
+What it shows:
+- Vehicle profile selection with preview images
+- Card title + title font size control
+- Entity prefix
+- Language picker with flags
+- Live preview on the right
+
+### 7) Editor categories (Hebrew)
+![Editor categories Hebrew](docs/screenshots/07-editor-categories-he.png)
+
+What it shows:
+- Image paths and i18n path configuration
+- Refresh interval setting
+- Category visibility toggles
+- Category order drag & drop
+
+### 8) Editor categories (English)
+![Editor categories English](docs/screenshots/08-editor-categories-en.png)
+
+What it shows:
+- Full English editor labels
+- Same category visibility + ordering workflow
+- Live preview in English
 
 ## Notes
 
