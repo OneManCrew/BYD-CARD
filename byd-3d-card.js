@@ -142,6 +142,7 @@ const ENTITY_HINTS = {
   charging: { domains: ["binary_sensor"], suffixes: ["charging", "is_charging"] },
   battery_power: { domains: ["sensor"], suffixes: ["battery_power"] },
   climate: { domains: ["climate", "switch"], suffixes: ["climate", "a_c_on", "car_on"] },
+  ac_switch: { domains: ["switch"], suffixes: ["a_c_on", "climate", "car_on"] },
   battery_heat: { domains: ["switch"], suffixes: ["battery_heat"] },
   cabin_temp: { domains: ["sensor"], suffixes: ["cabin_temperature", "temp_in_car"] },
   exterior_temp: { domains: ["sensor"], suffixes: ["exterior_temperature", "temp_out_car"] },
@@ -159,10 +160,22 @@ const ENTITY_HINTS = {
   flash_lights: { domains: ["button"], suffixes: ["flash_lights"] },
   find_car: { domains: ["button"], suffixes: ["find_car"] },
   close_windows: { domains: ["button"], suffixes: ["close_windows"] },
-  driver_seat_heat: { domains: ["select"], suffixes: ["driver_seat_heat"] },
-  passenger_seat_heat: { domains: ["select"], suffixes: ["passenger_seat_heat"] },
-  rear_left_seat_heat: { domains: ["select"], suffixes: ["rear_left_seat_heat"] },
-  rear_right_seat_heat: { domains: ["select"], suffixes: ["rear_right_seat_heat"] },
+  driver_seat_heat: { domains: ["select"], suffixes: ["driver_seat_heat", "driver_seat_heating"] },
+  passenger_seat_heat: { domains: ["select"], suffixes: ["passenger_seat_heat", "passenger_seat_heating"] },
+  rear_left_seat_heat: { domains: ["select"], suffixes: ["rear_left_seat_heat", "rear_left_seat_heating"] },
+  rear_right_seat_heat: { domains: ["select"], suffixes: ["rear_right_seat_heat", "rear_right_seat_heating"] },
+  tirepressure_system: { domains: ["binary_sensor"], suffixes: ["tirepressure_system"] },
+  rapid_tire_leak: { domains: ["binary_sensor"], suffixes: ["rapid_tire_leak"] },
+  left_front_tire_status: { domains: ["binary_sensor"], suffixes: ["left_front_tire_status"] },
+  right_front_tire_status: { domains: ["binary_sensor"], suffixes: ["right_front_tire_status"] },
+  left_rear_tire_status: { domains: ["binary_sensor"], suffixes: ["left_rear_tire_status"] },
+  right_rear_tire_status: { domains: ["binary_sensor"], suffixes: ["right_rear_tire_status"] },
+  abs_warning: { domains: ["binary_sensor"], suffixes: ["abs_warning"] },
+  braking_system: { domains: ["binary_sensor"], suffixes: ["braking_system"] },
+  steering_system: { domains: ["binary_sensor"], suffixes: ["steering_system"] },
+  charging_system: { domains: ["binary_sensor"], suffixes: ["charging_system"] },
+  srs: { domains: ["binary_sensor"], suffixes: ["srs"] },
+  svs: { domains: ["binary_sensor"], suffixes: ["svs"] },
 };
 
 const DEFAULT_CONFIG = {
@@ -179,8 +192,18 @@ const DEFAULT_CONFIG = {
   show_vehicle: true,
   show_location: true,
   language: "he",
+  category_order: ["summary", "climate", "vehicle", "tires", "location", "actions"],
   entities: {},
 };
+
+const CATEGORY_DEFS = [
+  { key: "summary", labelKey: "category_summary", icon: "mdi:car-electric" },
+  { key: "climate", labelKey: "category_climate", icon: "mdi:air-conditioner" },
+  { key: "vehicle", labelKey: "category_vehicle", icon: "mdi:car-info" },
+  { key: "tires", labelKey: "category_tires", icon: "mdi:car-tire-alert" },
+  { key: "location", labelKey: "category_location", icon: "mdi:map-marker-radius" },
+  { key: "actions", labelKey: "category_actions", icon: "mdi:gesture-tap-button" },
+];
 
 const TRANSLATION_CACHE = new Map();
 const FALLBACK_I18N = {
@@ -243,6 +266,8 @@ const FALLBACK_I18N = {
   settings_i18n_base_path: "נתיב בסיס לקבצי שפה",
   settings_language: "שפה",
   settings_categories: "קטגוריות",
+  settings_category_order: "סדר קטגוריות",
+  settings_category_order_hint: "גרור ושחרר כדי לשנות את הסדר בכפתורי הקטגוריות",
   settings_show_tires: "הצג צמיגים",
   settings_show_actions: "הצג פעולות מהירות",
   settings_show_climate: "הצג אקלים",
@@ -255,6 +280,11 @@ const FALLBACK_I18N = {
   max_cool: "מקסימום קירור",
   max_heat: "מקסימום חימום",
   comfort_21: "נוחות 21°",
+  alert_header: "התראת רכב",
+  alert_more: "תקלות נוספות",
+  alert_tire_pressure_low: "לחץ אוויר נמוך",
+  alert_tire_pressure_critical: "לחץ אוויר קריטי",
+  alert_system_fault: "תקלה במערכת",
 };
 
 function clamp(value, min, max) {
@@ -290,17 +320,156 @@ class Byd3DCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
+    this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
+    }
+    const storedCategory = this._loadStoredCategory();
+    this._activeCategory = storedCategory || this._activeCategory || "summary";
+    if (!this._seatUiOverrides) {
+      this._seatUiOverrides = {};
     }
     this._translations = FALLBACK_I18N;
     this._loadTranslations();
     this._render();
   }
 
+  _normalizeCategoryOrder(order) {
+    const base = CATEGORY_DEFS.map((c) => c.key);
+    if (!Array.isArray(order) || order.length === 0) return [...base];
+    const cleaned = order.filter((k) => base.includes(k));
+    for (const k of base) {
+      if (!cleaned.includes(k)) cleaned.push(k);
+    }
+    return cleaned;
+  }
+
+  _storageCategoryKey() {
+    const prefix = this._config?.entity_prefix || "auto";
+    const profile = this._config?.vehicle_profile || "default";
+    const title = this._config?.title || "byd";
+    const path = window?.location?.pathname || "";
+    return `byd3d:last-category:${path}:${profile}:${prefix}:${title}`;
+  }
+
+  _loadStoredCategory() {
+    try {
+      const key = this._storageCategoryKey();
+      const stored = window.localStorage.getItem(key);
+      if (!stored) return null;
+      const valid = CATEGORY_DEFS.some((cat) => cat.key === stored);
+      return valid ? stored : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  _persistActiveCategory(key) {
+    try {
+      if (!key) return;
+      const valid = CATEGORY_DEFS.some((cat) => cat.key === key);
+      if (!valid) return;
+      window.localStorage.setItem(this._storageCategoryKey(), key);
+    } catch (_err) {
+      // no-op: storage might be blocked by browser policy
+    }
+  }
+
+  _getRefreshEntityIds() {
+    if (!this._config) return [];
+    const logicalKeys = [
+      "battery",
+      "range",
+      "charging",
+      "battery_power",
+      "climate",
+      "ac_switch",
+      "battery_heat",
+      "driver_seat_heat",
+      "passenger_seat_heat",
+      "rear_left_seat_heat",
+      "rear_right_seat_heat",
+      "doors",
+      "windows",
+      "lock",
+      "online",
+      "tire_fl",
+      "tire_fr",
+      "tire_rl",
+      "tire_rr",
+      "location",
+    ];
+    const ids = logicalKeys
+      .map((key) => this._resolveEntity(key))
+      .filter(Boolean);
+    return [...new Set(ids)];
+  }
+
+  _refreshStateEntities(force = false) {
+    if (!this._hass || !this._config) return;
+    const now = Date.now();
+    if (!force && this._lastRefreshRequestTs && now - this._lastRefreshRequestTs < 7000) {
+      return;
+    }
+    const entityIds = this._getRefreshEntityIds();
+    if (!entityIds.length) return;
+    this._lastRefreshRequestTs = now;
+    this._hass.callService("homeassistant", "update_entity", {
+      entity_id: entityIds,
+    });
+  }
+
+  _schedulePostActionRefresh() {
+    if (this._postActionTimers?.length) {
+      this._postActionTimers.forEach((timer) => window.clearTimeout(timer));
+    }
+    this._postActionTimers = [1200, 4200, 9000].map((delay) =>
+      window.setTimeout(() => this._refreshStateEntities(true), delay)
+    );
+  }
+
+  _startAutoRefreshLoop() {
+    if (this._autoRefreshStarted) return;
+    this._autoRefreshStarted = true;
+    this._onVisibilityRefresh = () => {
+      if (document.visibilityState === "visible") this._refreshStateEntities(true);
+    };
+    document.addEventListener("visibilitychange", this._onVisibilityRefresh);
+    this._autoRefreshTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        this._refreshStateEntities(false);
+      }
+    }, 25000);
+    this._refreshStateEntities(true);
+  }
+
+  _stopAutoRefreshLoop() {
+    this._autoRefreshStarted = false;
+    if (this._autoRefreshTimer) {
+      window.clearInterval(this._autoRefreshTimer);
+      this._autoRefreshTimer = null;
+    }
+    if (this._onVisibilityRefresh) {
+      document.removeEventListener("visibilitychange", this._onVisibilityRefresh);
+      this._onVisibilityRefresh = null;
+    }
+    if (this._postActionTimers?.length) {
+      this._postActionTimers.forEach((timer) => window.clearTimeout(timer));
+      this._postActionTimers = [];
+    }
+  }
+
   set hass(hass) {
     this._hass = hass;
     this._render();
+  }
+
+  connectedCallback() {
+    this._startAutoRefreshLoop();
+  }
+
+  disconnectedCallback() {
+    this._stopAutoRefreshLoop();
   }
 
   getCardSize() {
@@ -378,6 +547,78 @@ class Byd3DCard extends HTMLElement {
     return this._t("not_available");
   }
 
+  _openClosedLabel(state) {
+    if (state === "on" || state === "unlocked") return this._t("unlocked");
+    if (state === "off" || state === "locked") return this._t("locked");
+    return this._t("not_available");
+  }
+
+  _isTruthyState(raw) {
+    const value = String(raw || "").trim().toLowerCase();
+    if (!value) return false;
+    const falseLike = new Set([
+      "off",
+      "false",
+      "0",
+      "none",
+      "idle",
+      "inactive",
+      "unknown",
+      "unavailable",
+      "no_data",
+      "none_selected",
+      "none_selected_",
+      "כבוי",
+      "לא פעיל",
+    ]);
+    if (falseLike.has(value)) return false;
+    return true;
+  }
+
+  _isClimateActive(raw) {
+    const value = String(raw || "").trim().toLowerCase();
+    if (!value) return false;
+    const activeValues = new Set([
+      "on",
+      "auto",
+      "cool",
+      "heat",
+      "heat_cool",
+      "dry",
+      "fan_only",
+      "heating",
+      "cooling",
+      "preheating",
+      "ventilation",
+    ]);
+    if (activeValues.has(value)) return true;
+    return this._isTruthyState(value);
+  }
+
+  _isSeatHeatActive(raw) {
+    const value = String(raw || "").trim().toLowerCase();
+    if (!value) return false;
+    const inactive = new Set(["off", "0", "none", "no_data", "unknown", "unavailable", "כבוי"]);
+    if (inactive.has(value)) return false;
+    const active = new Set([
+      "on",
+      "1",
+      "2",
+      "3",
+      "low",
+      "medium",
+      "mid",
+      "middle",
+      "high",
+      "נמוך",
+      "בינוני",
+      "גבוה",
+      "חזק",
+    ]);
+    if (active.has(value)) return true;
+    return this._isTruthyState(value);
+  }
+
   async _loadTranslations() {
     const lang = this._language();
     const cacheKey = `${lang}:${this._config.i18n_base_path || ""}`;
@@ -412,6 +653,7 @@ class Byd3DCard extends HTMLElement {
     const [domain] = eid.split(".");
     if (!domain) return;
     this._hass.callService(domain, "toggle", { entity_id: eid });
+    this._schedulePostActionRefresh();
   }
 
   _callClimatePower(on) {
@@ -423,9 +665,11 @@ class Byd3DCard extends HTMLElement {
         entity_id: eid,
         hvac_mode: on ? "heat_cool" : "off",
       });
+      this._schedulePostActionRefresh();
       return;
     }
     this._hass.callService(domain, "toggle", { entity_id: eid });
+    this._schedulePostActionRefresh();
   }
 
   _callClimateSetTemp(temp) {
@@ -437,6 +681,7 @@ class Byd3DCard extends HTMLElement {
       entity_id: eid,
       temperature: temp,
     });
+    this._schedulePostActionRefresh();
   }
 
   _callClimatePreset(presetMode) {
@@ -448,12 +693,14 @@ class Byd3DCard extends HTMLElement {
       entity_id: eid,
       preset_mode: presetMode,
     });
+    this._schedulePostActionRefresh();
   }
 
   _callButton(logicalKey) {
     const eid = this._resolveEntity(logicalKey);
     if (!eid || !this._hass) return;
     this._hass.callService("button", "press", { entity_id: eid });
+    this._schedulePostActionRefresh();
   }
 
   _callSelectOption(logicalKey, option) {
@@ -463,6 +710,51 @@ class Byd3DCard extends HTMLElement {
       entity_id: eid,
       option,
     });
+    this._schedulePostActionRefresh();
+  }
+
+  _handleServiceIndicatorAction(indicatorId) {
+    if (!indicatorId) return;
+    if (indicatorId === "climate") {
+      const climateEid = this._resolveEntity("climate");
+      const climateDomain = climateEid?.split(".")[0] || "";
+      if (climateDomain === "climate") {
+        this._callClimatePower(false);
+      } else if (this._resolveEntity("ac_switch")) {
+        const acOn = this._isClimateActive(this._state("ac_switch")?.state);
+        if (acOn) this._callToggle("ac_switch");
+      } else if (climateEid) {
+        this._callClimatePower(false);
+      }
+      return;
+    }
+
+    if (indicatorId === "battery_heat") {
+      if (this._state("battery_heat")?.state === "on") this._callToggle("battery_heat");
+      return;
+    }
+
+    if (indicatorId === "seat_heat") {
+      const seatKeys = ["driver_seat_heat", "passenger_seat_heat", "rear_left_seat_heat", "rear_right_seat_heat"];
+      for (const key of seatKeys) {
+        if (this._resolveEntity(key)) {
+          this._callSelectOption(key, "off");
+          this._seatUiOverrides[key] = { option: "off", ts: Date.now() };
+        }
+      }
+      this._render();
+      return;
+    }
+
+    if (indicatorId === "windows_open") {
+      if (this._resolveEntity("close_windows")) this._callButton("close_windows");
+      return;
+    }
+
+    if (indicatorId === "lock_open") {
+      const lockState = this._state("lock")?.state;
+      if (lockState === "unlocked" || lockState === "on") this._callToggle("lock");
+    }
   }
 
   _renderActionButton(key, title, icon, handler) {
@@ -483,9 +775,12 @@ class Byd3DCard extends HTMLElement {
   _category(title, content, options = {}) {
     if (!content || content.trim() === "") return "";
     const titleClass = options.titleClass || "";
+    const icon = options.icon
+      ? `<span class="category-title-row"><ha-icon class="category-title-icon" icon="${options.icon}"></ha-icon><span class="category-title-text">${title}</span><span class="category-title-spacer"></span></span>`
+      : title;
     return `
       <section class="category">
-        <h3 class="${titleClass}">${title}</h3>
+        <h3 class="${titleClass}">${icon}</h3>
         ${content}
       </section>
     `;
@@ -494,7 +789,11 @@ class Byd3DCard extends HTMLElement {
   _renderSeatHeatControl(logicalKey, label) {
     const seatState = this._state(logicalKey);
     if (!seatState) return "";
-    const current = String(seatState.state || "off").toLowerCase();
+    const override = this._seatUiOverrides?.[logicalKey];
+    const overrideIsFresh = override && Date.now() - override.ts < 12000;
+    const current = String(
+      (overrideIsFresh ? override.option : seatState.state) || "off"
+    ).toLowerCase();
     const options = ["off", "low", "high"];
     const levelLabel = (opt) => this._t(`level_${opt}`);
     return `
@@ -510,6 +809,16 @@ class Byd3DCard extends HTMLElement {
         </div>
       </div>
     `;
+  }
+
+  _flashButtonFeedback(btn) {
+    if (!btn) return;
+    btn.classList.remove("btn-feedback");
+    // Force restart animation when repeatedly clicking the same button.
+    // eslint-disable-next-line no-unused-expressions
+    btn.offsetWidth;
+    btn.classList.add("btn-feedback");
+    window.setTimeout(() => btn.classList.remove("btn-feedback"), 520);
   }
 
   _render() {
@@ -535,6 +844,18 @@ class Byd3DCard extends HTMLElement {
     const climateState = this._state("climate");
     const batteryHeatState = this._state("battery_heat");
     const locationState = this._state("location");
+    const tirepressureSystemState = this._state("tirepressure_system");
+    const rapidTireLeakState = this._state("rapid_tire_leak");
+    const lfTireStatusState = this._state("left_front_tire_status");
+    const rfTireStatusState = this._state("right_front_tire_status");
+    const lrTireStatusState = this._state("left_rear_tire_status");
+    const rrTireStatusState = this._state("right_rear_tire_status");
+    const absWarningState = this._state("abs_warning");
+    const brakingSystemState = this._state("braking_system");
+    const steeringSystemState = this._state("steering_system");
+    const chargingSystemState = this._state("charging_system");
+    const srsState = this._state("srs");
+    const svsState = this._state("svs");
     const seatHeatSection = [
       this._renderSeatHeatControl("driver_seat_heat", this._t("seat_driver")),
       this._renderSeatHeatControl("passenger_seat_heat", this._t("seat_passenger")),
@@ -544,16 +865,22 @@ class Byd3DCard extends HTMLElement {
       .filter(Boolean)
       .join("");
 
-    const climateDomain = this._resolveEntity("climate")?.split(".")[0] || "";
-    const climateIsOn =
-      climateDomain === "climate"
-        ? climateState?.state && climateState.state !== "off"
-        : climateState?.state === "on";
+    const acSwitchState = this._state("ac_switch");
+    const climateIsOn = this._isClimateActive(climateState?.state) || this._isClimateActive(acSwitchState?.state);
     const climateTempRaw = toNumber(climateState?.attributes?.temperature);
     const climateMin = toNumber(climateState?.attributes?.min_temp) ?? 15;
     const climateMax = toNumber(climateState?.attributes?.max_temp) ?? 31;
     const climateTemp = climateTempRaw ?? 21;
     const presetMode = String(climateState?.attributes?.preset_mode || "").toLowerCase();
+    const seatKeys = ["driver_seat_heat", "passenger_seat_heat", "rear_left_seat_heat", "rear_right_seat_heat"];
+    const seatHeatStates = seatKeys
+      .map((key) => {
+        const override = this._seatUiOverrides?.[key];
+        const overrideIsFresh = override && Date.now() - override.ts < 12000;
+        return overrideIsFresh ? override.option : this._state(key)?.state;
+      })
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== "");
+    const seatHeatActive = seatHeatStates.some((v) => this._isSeatHeatActive(v));
 
     const battery = clamp(toNumber(batteryState?.state) ?? 0, 0, 100);
     const range = toNumber(rangeState?.state);
@@ -573,6 +900,11 @@ class Byd3DCard extends HTMLElement {
     ) {
       powerDisplay = `${powerRaw} ${powerUnit}`;
     }
+    const chargingHeadLabel = isCharging
+      ? `<span class="charging-label"><span class="charging-icon">⚡</span><span class="charging-text">${this._t("charging_active")}</span></span>`
+      : this._t("battery_status");
+    const powerMarkup = `<span class="power-pair"><span class="power-value">${powerDisplay}</span></span>`;
+    const idleInBarMarkup = !isCharging ? `<div class="battery-inline-state">${this._t("not_charging")}</div>` : "";
 
     const tireKeys = [
       ["tire_fl", this._t("front_left")],
@@ -597,6 +929,142 @@ class Byd3DCard extends HTMLElement {
       })
       .join("");
 
+    const alerts = [];
+    const addAlert = (message) => {
+      if (message && !alerts.includes(message)) alerts.push(message);
+    };
+    const tireWarn = (label, psi) => {
+      if (psi === null) return;
+      if (psi < 28) addAlert(`${this._t("alert_tire_pressure_critical")} - ${label}`);
+      else if (psi < 30) addAlert(`${this._t("alert_tire_pressure_low")} - ${label}`);
+    };
+
+    const flPsi = (() => {
+      const s = this._state("tire_fl");
+      const kpa = toNumber(s?.state);
+      return kpa === null ? null : kpa * 0.145038;
+    })();
+    const frPsi = (() => {
+      const s = this._state("tire_fr");
+      const kpa = toNumber(s?.state);
+      return kpa === null ? null : kpa * 0.145038;
+    })();
+    const rlPsi = (() => {
+      const s = this._state("tire_rl");
+      const kpa = toNumber(s?.state);
+      return kpa === null ? null : kpa * 0.145038;
+    })();
+    const rrPsi = (() => {
+      const s = this._state("tire_rr");
+      const kpa = toNumber(s?.state);
+      return kpa === null ? null : kpa * 0.145038;
+    })();
+
+    tireWarn(this._t("front_left"), flPsi);
+    tireWarn(this._t("front_right"), frPsi);
+    tireWarn(this._t("rear_left"), rlPsi);
+    tireWarn(this._t("rear_right"), rrPsi);
+
+    const boolFaultState = (s) => s?.state === "on";
+    if (boolFaultState(rapidTireLeakState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rapid_tire_leak")}`);
+    if (boolFaultState(tirepressureSystemState)) addAlert(`${this._t("alert_system_fault")} - TPMS`);
+    if (boolFaultState(lfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_left")}`);
+    if (boolFaultState(rfTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("front_right")}`);
+    if (boolFaultState(lrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_left")}`);
+    if (boolFaultState(rrTireStatusState)) addAlert(`${this._t("alert_system_fault")} - ${this._t("rear_right")}`);
+    if (boolFaultState(absWarningState)) addAlert(`${this._t("alert_system_fault")} - ABS`);
+    if (boolFaultState(brakingSystemState)) addAlert(`${this._t("alert_system_fault")} - Brake`);
+    if (boolFaultState(steeringSystemState)) addAlert(`${this._t("alert_system_fault")} - Steering`);
+    if (boolFaultState(chargingSystemState)) addAlert(`${this._t("alert_system_fault")} - Charging`);
+    if (boolFaultState(srsState)) addAlert(`${this._t("alert_system_fault")} - SRS`);
+    if (boolFaultState(svsState)) addAlert(`${this._t("alert_system_fault")} - SVS`);
+
+    const alertJoined = alerts.map((msg) => `⚠ ${msg}`).join("   •   ");
+    const alertRibbon = alerts.length
+      ? `
+        <div class="alert-ribbon ${alerts.length > 1 ? "scrolling" : ""}">
+          <div class="alert-ribbon-inner">
+            <div class="alert-ribbon-head">
+              <span class="alert-ribbon-sign">⚠</span>
+              <span>${this._t("alert_header")}</span>
+            </div>
+            <div class="alert-ribbon-body">
+              ${
+                alerts.length > 1
+                  ? `
+                <div class="alert-marquee">
+                  <div class="alert-marquee-track">
+                    <span class="alert-marquee-line">${alertJoined}</span>
+                    <span class="alert-marquee-line" aria-hidden="true">${alertJoined}</span>
+                  </div>
+                </div>
+              `
+                  : `<div class="alert-single">⚠ ${alerts[0]}</div>`
+              }
+            </div>
+          </div>
+        </div>
+      `
+      : "";
+
+    const serviceIndicators = [];
+    const pushIndicator = (id, icon, label, tone = "info", actionable = false) => {
+      if (serviceIndicators.some((i) => i.id === id)) return;
+      serviceIndicators.push({ id, icon, label, tone, actionable });
+    };
+    const canControlClimate = Boolean(this._resolveEntity("climate") || this._resolveEntity("ac_switch"));
+    const canToggleBatteryHeat = Boolean(this._resolveEntity("battery_heat"));
+    const canControlSeatHeat = ["driver_seat_heat", "passenger_seat_heat", "rear_left_seat_heat", "rear_right_seat_heat"].some((key) =>
+      Boolean(this._resolveEntity(key))
+    );
+    const canCloseWindows = Boolean(this._resolveEntity("close_windows"));
+    const canToggleLock = Boolean(this._resolveEntity("lock"));
+    if (climateIsOn) pushIndicator("climate", "mdi:air-conditioner", this._t("ac"), "cold", canControlClimate);
+    if (batteryHeatState?.state === "on") {
+      pushIndicator("battery_heat", "mdi:heat-wave", this._t("battery_heat"), "hot", canToggleBatteryHeat);
+    }
+    if (seatHeatActive) {
+      pushIndicator("seat_heat", "mdi:car-seat-heater", this._t("seat_heating"), "hot", canControlSeatHeat);
+    }
+    if (doorsState?.state === "on") {
+      pushIndicator("doors_open", "mdi:car-door", this._t("doors"), "warn");
+    }
+    if (windowsState?.state === "on") {
+      pushIndicator("windows_open", "mdi:window-open", this._t("windows"), "warn", canCloseWindows);
+    }
+    if (lockState?.state === "unlocked") {
+      pushIndicator("lock_open", "mdi:lock-open-variant-outline", this._t("lock"), "warn", canToggleLock);
+    }
+    if (chargingState?.state === "on") {
+      pushIndicator("charging", "mdi:ev-station", this._t("charging"), "cold");
+    }
+    const visibleServiceIndicators = serviceIndicators.slice(0, 3);
+    const heroBatteryOverlay = `
+      <div class="hero-battery-badge ${lowBattery ? "low" : ""}">
+        <span class="hero-battery-label">${this._t("battery_status")}</span>
+        <span class="hero-battery-value">${battery.toFixed(0)}%</span>
+      </div>
+    `;
+    const serviceOverlay = visibleServiceIndicators.length
+      ? `
+        <div class="hero-services-grid">
+          ${visibleServiceIndicators
+            .map(
+              (item) => `
+                <div
+                  class="hero-service-item tone-${item.tone} ${item.actionable ? "actionable" : "readonly"}"
+                  title="${item.label}"
+                  data-indicator="${item.id}"
+                >
+                  <ha-icon icon="${item.icon}"></ha-icon>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `
+      : "";
+
     const summaryMetrics = `
       <div class="metrics-grid">
         ${this._metric(this._t("interior_temp"), `${cabinTempState?.state ?? "-"}°C`)}
@@ -605,6 +1073,30 @@ class Byd3DCard extends HTMLElement {
         ${this._metric(this._t("odometer"), `${odoState?.state ?? "-"} ${this._t("odometer_km")}`)}
       </div>
     `;
+
+    const summaryCategory = this._category(
+      this._t("category_summary"),
+      `
+      <div class="panel">
+        <div class="battery-head">
+          <span class="battery-head-power">${powerMarkup}</span>
+          <span class="battery-head-status">${chargingHeadLabel}</span>
+        </div>
+        <div class="battery-row">
+          <div class="battery-shell ${isCharging ? "is-charging" : ""}">
+            <div class="battery-fill ${isCharging ? "charging" : ""}" style="width:${battery}%"></div>
+            <div class="battery-gloss"></div>
+            ${idleInBarMarkup}
+          </div>
+          <div class="battery-percent">${battery.toFixed(0)}%</div>
+        </div>
+        <div class="battery-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
+        ${isCharging ? `<div class="battery-sub"><span class="charge-state">${this._t("charging")}</span></div>` : ""}
+      </div>
+      ${summaryMetrics}
+      `,
+      { titleClass: "category-title-main", icon: "mdi:car-electric" }
+    );
 
     const climateCategory = this._config.show_climate
       ? this._category(
@@ -638,35 +1130,35 @@ class Byd3DCard extends HTMLElement {
               seatHeatSection
                 ? `
             <div class="seat-wrap">
-              <div class="seat-header">${this._t("seat_heating")}</div>
+              <div class="seat-header"><ha-icon icon="mdi:car-seat-heater"></ha-icon><span>${this._t("seat_heating")}</span></div>
               <div class="seat-grid">${seatHeatSection}</div>
             </div>
             `
                 : ""
             }
           `
-        )
+        , { icon: "mdi:air-conditioner" })
       : "";
 
     const vehicleCategory = this._config.show_vehicle
       ? this._category(
           this._t("category_vehicle"),
           `
-            <div class="metrics-grid">
-              ${this._metric(this._t("doors"), this._boolLabel(doorsState?.state))}
-              ${this._metric(this._t("windows"), this._boolLabel(windowsState?.state))}
+              <div class="metrics-grid">
+              ${this._metric(this._t("doors"), this._openClosedLabel(doorsState?.state))}
+              ${this._metric(this._t("windows"), this._openClosedLabel(windowsState?.state))}
               ${this._metric(this._t("lock"), this._boolLabel(lockState?.state))}
               ${this._metric(this._t("online"), this._boolLabel(onlineState?.state))}
               ${this._metric(this._t("speed"), `${speedState?.state ?? "-"} ${this._t("speed_kmh")}`)}
               ${this._metric(this._t("odometer"), `${odoState?.state ?? "-"} ${this._t("odometer_km")}`)}
             </div>
           `
-        )
+        , { icon: "mdi:car-info" })
       : "";
 
     const tiresCategory =
       this._config.show_tires && tireCards
-        ? this._category(this._t("category_tires"), `<div class="tires">${tireCards}</div>`)
+        ? this._category(this._t("category_tires"), `<div class="tires">${tireCards}</div>`, { icon: "mdi:car-tire-alert" })
         : "";
 
     const actionsCategory = this._config.show_actions
@@ -682,7 +1174,7 @@ class Byd3DCard extends HTMLElement {
               ${this._renderActionButton("close_windows", this._t("close_windows"), "mdi:window-closed-variant", "press")}
             </div>
           `
-        )
+        , { icon: "mdi:gesture-tap-button" })
       : "";
 
     const locationCategory =
@@ -697,48 +1189,59 @@ class Byd3DCard extends HTMLElement {
                 ${this._metric(this._t("online"), this._boolLabel(onlineState?.state))}
               </div>
             `
-          )
+          , { icon: "mdi:map-marker-radius" })
         : "";
+
+    const categoryTabsRaw = [
+      { key: "summary", label: this._t("category_summary"), icon: "mdi:car-electric", content: summaryCategory, enabled: true },
+      { key: "climate", label: this._t("category_climate"), icon: "mdi:air-conditioner", content: climateCategory, enabled: this._config.show_climate },
+      { key: "vehicle", label: this._t("category_vehicle"), icon: "mdi:car-info", content: vehicleCategory, enabled: this._config.show_vehicle },
+      { key: "tires", label: this._t("category_tires"), icon: "mdi:car-tire-alert", content: tiresCategory, enabled: this._config.show_tires },
+      { key: "location", label: this._t("category_location"), icon: "mdi:map-marker-radius", content: locationCategory, enabled: this._config.show_location },
+      { key: "actions", label: this._t("category_actions"), icon: "mdi:gesture-tap-button", content: actionsCategory, enabled: this._config.show_actions },
+    ];
+    const order = this._normalizeCategoryOrder(this._config.category_order);
+    const categoryMap = new Map(categoryTabsRaw.map((t) => [t.key, t]));
+    const categoryTabs = order.map((k) => categoryMap.get(k)).filter(Boolean);
+    const visibleTabs = categoryTabs.filter((tab) => tab.enabled && tab.content);
+    if (!visibleTabs.some((tab) => tab.key === this._activeCategory)) {
+      this._activeCategory = visibleTabs[0]?.key || "summary";
+    }
+    const activeTab = visibleTabs.find((tab) => tab.key === this._activeCategory) || visibleTabs[0];
+    this._persistActiveCategory(activeTab?.key);
+    const activeContent = activeTab?.content || "";
 
     this.shadowRoot.innerHTML = `
       <ha-card>
         <div class="wrap ${lowBattery ? "low" : ""}">
+          <div class="hero-title">${title}</div>
           <div class="hero">
             <img class="car-image" src="${imageUrl}" data-fallback="${profile.image}" alt="${profile.label}" />
-            <div class="hero-overlay"></div>
-          </div>
-
-          ${this._category(
-            title || this._t("category_summary"),
-            `
-          <div class="panel">
-            <div class="battery-head">
-              <span>${isCharging ? `⚡ ${this._t("charging")}` : this._t("battery_status")}</span>
-            </div>
-            <div class="battery-row">
-              <div class="battery-shell">
-                <div class="battery-fill ${isCharging ? "charging" : ""}" style="width:${battery}%"></div>
-                <div class="battery-gloss"></div>
-              </div>
-              <div class="battery-side">
-                <div class="battery-percent">${battery.toFixed(0)}%</div>
-                <div class="battery-range">${range === null ? "-" : range.toFixed(0)} ${this._t("range_km")}</div>
-              </div>
-            </div>
-            <div class="battery-sub">
-              ${isCharging ? this._t("charging_active") : this._t("charging_inactive")} ·
-              ${this._t("power")}: <span class="power-value">${powerDisplay}</span>
+            <div class="hero-overlay">
+              ${heroBatteryOverlay}
+              ${serviceOverlay}
             </div>
           </div>
-          ${summaryMetrics}
-          `
-          , { titleClass: "category-title-main" })}
 
-          ${climateCategory}
-          ${vehicleCategory}
-          ${tiresCategory}
-          ${locationCategory}
-          ${actionsCategory}
+          ${alertRibbon}
+
+          <div class="category-tabs" role="radiogroup" aria-label="Vehicle categories">
+            ${visibleTabs
+              .map((tab) => {
+                const active = tab.key === this._activeCategory ? "active" : "";
+                return `
+                  <button class="cat-tab ${active}" data-category="${tab.key}" aria-checked="${tab.key === this._activeCategory ? "true" : "false"}" role="radio">
+                    <ha-icon icon="${tab.icon}"></ha-icon>
+                    <span>${tab.label}</span>
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+
+          <div class="active-category-content">
+            ${activeContent}
+          </div>
         </div>
       </ha-card>
       <style>
@@ -763,6 +1266,16 @@ class Byd3DCard extends HTMLElement {
         .wrap.low {
           background: radial-gradient(circle at 18% 8%, #5e2830 0%, #1a1218 58%, #0a080d 100%);
         }
+        .hero-title {
+          margin: 2px 4px 10px;
+          font-size: clamp(30px, 5.4vw, 60px);
+          font-weight: 900;
+          line-height: 1.08;
+          letter-spacing: .2px;
+          color: #f3f8ff;
+          text-shadow: 0 8px 22px rgba(0,0,0,.34);
+          text-align: center;
+        }
         .hero {
           position: relative;
           border-radius: 20px;
@@ -781,10 +1294,162 @@ class Byd3DCard extends HTMLElement {
         .hero-overlay {
           position: absolute;
           inset: 0;
-          display: flex;
-          justify-content: flex-end;
+          display: block;
           padding: 14px;
           background: linear-gradient(180deg, rgba(5,7,10,.12), rgba(5,7,10,.72));
+        }
+        .hero-services-grid {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          display: grid;
+          grid-template-columns: repeat(3, 34px);
+          gap: 7px;
+          max-width: 130px;
+        }
+        .hero-service-item {
+          width: 34px;
+          height: 34px;
+          border-radius: 11px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(186, 219, 246, .26);
+          background: linear-gradient(180deg, rgba(20,32,48,.76), rgba(12,18,26,.88));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .hero-battery-badge {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          min-width: 106px;
+          padding: 7px 10px;
+          border-radius: 12px;
+          border: 1px solid rgba(126,198,241,.42);
+          background: linear-gradient(180deg, rgba(13,24,36,.72), rgba(10,17,26,.86));
+          box-shadow: 0 0 18px rgba(76,179,236,.2), inset 0 1px 0 rgba(255,255,255,.15);
+          text-align: right;
+        }
+        .hero-battery-badge.low {
+          border-color: rgba(255,126,126,.58);
+          box-shadow: 0 0 16px rgba(255,95,95,.22), inset 0 1px 0 rgba(255,255,255,.15);
+        }
+        .hero-battery-label {
+          display: block;
+          font-size: 11px;
+          font-weight: 800;
+          color: rgba(222,241,255,.82);
+          line-height: 1.1;
+        }
+        .hero-battery-value {
+          display: block;
+          margin-top: 2px;
+          font-size: 24px;
+          font-weight: 900;
+          line-height: 1;
+          color: #f4fbff;
+          text-shadow: 0 0 12px rgba(121,219,255,.45);
+        }
+        .hero-service-item ha-icon {
+          width: 20px;
+          height: 20px;
+          color: #d8ecff;
+        }
+        .hero-service-item.actionable {
+          cursor: pointer;
+        }
+        .hero-service-item.readonly {
+          opacity: .74;
+        }
+        .hero-service-item.actionable:active {
+          transform: scale(.96);
+        }
+        .hero-service-item.tone-cold {
+          border-color: rgba(93,201,255,.52);
+          box-shadow: 0 0 12px rgba(93,201,255,.24), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .hero-service-item.tone-hot {
+          border-color: rgba(255,149,114,.54);
+          box-shadow: 0 0 12px rgba(255,149,114,.25), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .hero-service-item.tone-warn {
+          border-color: rgba(255,119,109,.6);
+          box-shadow: 0 0 12px rgba(255,119,109,.24), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .alert-ribbon {
+          margin-top: 10px;
+          border-radius: 14px;
+          border: 1px solid rgba(255,128,116,.54);
+          background: linear-gradient(180deg, rgba(124,25,25,.30), rgba(65,13,13,.38));
+          box-shadow: 0 0 18px rgba(255,97,87,.20), inset 0 1px 0 rgba(255,255,255,.14);
+          overflow: hidden;
+        }
+        .alert-ribbon-inner {
+          padding: 6px 10px;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          align-items: center;
+          gap: 8px;
+        }
+        .alert-ribbon-head {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #ffe2de;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: .5px;
+          margin-bottom: 0;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .alert-ribbon-body {
+          min-width: 0;
+        }
+        .alert-ribbon-sign {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          font-size: 13px;
+          line-height: 1;
+          color: #ffc1bb;
+          transform: translateY(-0.5px);
+        }
+        .alert-single {
+          color: #fff4f2;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.2;
+          display: block;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .alert-marquee {
+          flex: 1;
+          overflow: hidden;
+          white-space: nowrap;
+          border-radius: 8px;
+          background: rgba(0,0,0,.16);
+          border: 1px solid rgba(255,154,144,.24);
+        }
+        .alert-marquee-track {
+          display: inline-flex;
+          align-items: center;
+          min-width: max-content;
+          gap: 24px;
+          padding: 4px 0;
+          animation: alert-scroll 18s linear infinite;
+          will-change: transform;
+        }
+        .alert-marquee-line {
+          color: #fff4f2;
+          font-size: 13px;
+          font-weight: 800;
+          padding-inline: 8px;
+          line-height: 1.2;
         }
         .panel {
           border-radius: 20px;
@@ -807,24 +1472,144 @@ class Byd3DCard extends HTMLElement {
             radial-gradient(circle at 24% 10%, rgba(58,120,188,.2), transparent 33%),
             linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
         }
+        .category-tabs {
+          margin-top: 12px;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .cat-tab {
+          appearance: none;
+          border: 1px solid rgba(157,190,220,.20);
+          background: linear-gradient(180deg, rgba(24,35,49,.86), rgba(15,22,31,.9));
+          border-radius: 12px;
+          min-height: 44px;
+          color: rgba(228,240,252,.92);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: transform .12s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+          text-align: center;
+        }
+        .cat-tab:hover { transform: translateY(-1px); }
+        .cat-tab ha-icon {
+          width: 16px;
+          height: 16px;
+          color: rgba(173,221,255,.92);
+        }
+        .cat-tab span {
+          text-align: center;
+          display: inline-block;
+          width: 100%;
+        }
+        .cat-tab.active {
+          border-color: rgba(84,194,255,.75);
+          background: linear-gradient(180deg, rgba(0,184,255,.20), rgba(0,184,255,.06));
+          box-shadow: 0 0 0 1px rgba(84,194,255,.35) inset, 0 10px 24px rgba(20,130,210,.2);
+          color: #f4fbff;
+        }
+        .btn-feedback {
+          animation: btn-pulse .45s ease;
+        }
+        .active-category-content {
+          margin-top: 2px;
+        }
         .category h3 {
           margin: 2px 2px 10px;
-          font-size: 13px;
-          text-transform: uppercase;
-          letter-spacing: 1.1px;
+          font-size: 22px;
+          text-transform: none;
+          letter-spacing: .4px;
           color: rgba(255,255,255,.8);
+          text-align: center;
+          font-weight: 900;
+        }
+        .category-title-row {
+          display: grid;
+          grid-template-columns: 36px 1fr 36px;
+          align-items: start;
+          width: 100%;
+          gap: 8px;
+        }
+        .category-title-icon {
+          width: 36px;
+          height: 36px;
+          color: rgba(180, 227, 255, .92);
+          filter: drop-shadow(0 0 7px rgba(99, 199, 255, .35));
+          justify-self: start;
+          align-self: start;
+          margin-top: -2px;
+        }
+        .category-title-text {
+          justify-self: center;
+          text-align: center;
+          line-height: 1.12;
+        }
+        .category-title-spacer {
+          width: 36px;
+          height: 36px;
         }
         .category h3.category-title-main {
           text-transform: none;
           letter-spacing: .2px;
-          font-size: 24px;
+          font-size: 32px;
           font-weight: 900;
           color: #f2f8ff;
           text-shadow: 0 2px 12px rgba(0,0,0,.35);
           text-align: center;
         }
-        .battery-head { display: flex; align-items: center; margin-bottom: 8px; }
-        .battery-head span { font-size: 12px; color: rgba(230,242,255,.74); letter-spacing: .8px; }
+        .battery-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        .battery-head-status {
+          font-size: 20px;
+          color: rgba(237,247,255,.97);
+          font-weight: 900;
+          letter-spacing: .2px;
+          text-align: right;
+        }
+        .battery-head-power {
+          font-size: 21px;
+          color: rgba(216,244,255,.98);
+          font-weight: 900;
+          text-align: left;
+          text-shadow: 0 0 16px rgba(104,216,255,.45);
+          line-height: 1;
+        }
+        .battery-head-power .power-pair {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 4px;
+          direction: ltr;
+        }
+        .battery-head-power .power-value {
+          font-size: 1em;
+          font-weight: 900;
+          color: inherit;
+        }
+        .charging-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: #ecf9ff;
+        }
+        .charging-icon {
+          font-size: 20px;
+          line-height: 1;
+          text-shadow: 0 0 14px rgba(108, 219, 255, .75);
+        }
+        .charging-text {
+          font-size: 17px;
+          font-weight: 900;
+          letter-spacing: .3px;
+        }
         .battery-row {
           display: flex;
           align-items: center;
@@ -883,10 +1668,30 @@ class Byd3DCard extends HTMLElement {
           border-radius: 999px;
           background: linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,0));
         }
+        .battery-inline-state {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 6;
+          font-size: 14px;
+          font-weight: 900;
+          color: rgba(241,249,255,.96);
+          padding: 2px 10px;
+          border-radius: 999px;
+          background: rgba(8,14,20,.46);
+          border: 1px solid rgba(176,212,238,.35);
+          text-shadow: 0 1px 8px rgba(0,0,0,.65);
+          pointer-events: none;
+          white-space: nowrap;
+        }
+        .battery-shell.is-charging .battery-inline-state {
+          display: none !important;
+        }
         .battery-percent {
-          min-width: 70px;
+          min-width: 92px;
           text-align: right;
-          font-size: 34px;
+          font-size: 52px;
           font-weight: 900;
           line-height: 1;
           color: #f8feff;
@@ -894,35 +1699,27 @@ class Byd3DCard extends HTMLElement {
             0 0 18px rgba(120,220,255,.75),
             0 0 34px rgba(81,187,255,.5);
         }
-        .battery-side {
-          min-width: 85px;
-          text-align: right;
-          padding: 6px 9px;
-          border-radius: 12px;
-          background: linear-gradient(180deg, rgba(120,220,255,.14), rgba(120,220,255,.02));
-          border: 1px solid rgba(120,220,255,.24);
-        }
         .battery-range {
-          margin-top: 2px;
-          font-size: 17px;
-          font-weight: 800;
-          color: rgba(218,242,255,.92);
+          margin-top: 8px;
+          font-size: 22px;
+          font-weight: 900;
+          color: rgba(228,247,255,.96);
+          text-align: right;
+          letter-spacing: .1px;
           white-space: nowrap;
+          text-shadow: 0 0 16px rgba(109,210,255,.32);
         }
         .battery-sub {
-          margin-top: 9px;
+          margin-top: 6px;
           color: rgba(226,239,252,.92);
-          font-size: 17px;
+          font-size: 16px;
           font-weight: 700;
-          text-align: center;
+          text-align: right;
         }
-        .battery-sub .power-value {
-          display: inline-block;
-          direction: ltr;
-          unicode-bidi: bidi-override;
-          font-weight: 800;
+        .battery-sub .charge-state {
+          font-size: 17px;
+          font-weight: 900;
           color: #f2fbff;
-          margin-inline-start: 2px;
         }
         .metrics-grid {
           display: grid;
@@ -934,9 +1731,27 @@ class Byd3DCard extends HTMLElement {
           padding: 10px 11px;
           background: rgba(255,255,255,.06);
           border: 1px solid rgba(255,255,255,.10);
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          text-align: center;
         }
-        .metric label { font-size: 12px; color: rgba(255,255,255,.70); display: block; }
-        .metric strong { font-size: 15px; margin-top: 4px; display: block; color: #fff; }
+        .metric label {
+          font-size: 12px;
+          color: rgba(255,255,255,.70);
+          display: block;
+          width: 100%;
+          text-align: center;
+        }
+        .metric strong {
+          font-size: 15px;
+          margin-top: 4px;
+          display: block;
+          width: 100%;
+          text-align: center;
+          color: #fff;
+        }
         .actions {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -957,9 +1772,15 @@ class Byd3DCard extends HTMLElement {
           gap: 9px;
           cursor: pointer;
           box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+          text-align: center;
         }
         .action-btn:active { transform: translateY(1px); }
         .action-btn ha-icon { width: 19px; height: 19px; }
+        .action-btn span {
+          text-align: center;
+          width: 100%;
+          display: inline-block;
+        }
         .seat-wrap {
           margin-top: 10px;
           border-radius: 14px;
@@ -972,6 +1793,15 @@ class Byd3DCard extends HTMLElement {
           color: rgba(255,255,255,.72);
           margin-bottom: 8px;
           letter-spacing: .6px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .seat-header ha-icon {
+          width: 16px;
+          height: 16px;
+          color: rgba(255, 169, 128, .95);
+          filter: drop-shadow(0 0 7px rgba(255, 121, 88, .42));
         }
         .seat-grid {
           display: grid;
@@ -988,6 +1818,7 @@ class Byd3DCard extends HTMLElement {
           font-size: 12px;
           color: rgba(255,255,255,.78);
           margin-bottom: 7px;
+          text-align: center;
         }
         .seat-levels {
           display: grid;
@@ -1004,11 +1835,13 @@ class Byd3DCard extends HTMLElement {
           font-size: 11px;
           font-weight: 700;
           cursor: pointer;
+          text-align: center;
         }
         .seat-level.active.level-off {
-          border-color: rgba(255,255,255,.35);
-          background: rgba(230,237,245,.2);
-          color: #f2f7ff;
+          border-color: rgba(156,197,230,.72);
+          background: linear-gradient(180deg, rgba(133,161,191,.45), rgba(112,139,167,.36));
+          color: #f2f8ff;
+          box-shadow: 0 0 16px rgba(143,186,225,.26), inset 0 1px 0 rgba(255,255,255,.2);
         }
         .seat-level.active.level-low {
           border-color: rgba(255,179,71,.6);
@@ -1050,6 +1883,7 @@ class Byd3DCard extends HTMLElement {
           font-weight: 700;
           cursor: pointer;
           padding: 0 8px;
+          text-align: center;
         }
         .climate-btn.on {
           background: rgba(0,217,255,.2);
@@ -1094,21 +1928,80 @@ class Byd3DCard extends HTMLElement {
           padding: 10px 11px;
           background: rgba(255,255,255,.06);
           border: 1px solid rgba(255,255,255,.10);
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          text-align: center;
         }
         .tire-card.warn { animation: blink 1s infinite; }
-        .tire-title { font-size: 12px; color: rgba(255,255,255,.72); }
-        .tire-value { margin-top: 4px; font-size: 16px; font-weight: 800; }
+        .tire-title { font-size: 12px; color: rgba(255,255,255,.72); text-align: center; width: 100%; }
+        .tire-value { margin-top: 4px; font-size: 16px; font-weight: 800; text-align: center; width: 100%; }
         @keyframes electric-current { 0% { transform: translateX(-36px); } 100% { transform: translateX(36px); } }
         @keyframes charge-wave { 0% { left: -40%; opacity: .2; } 35% { opacity: 1; } 100% { left: 100%; opacity: .3; } }
         @keyframes blink { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+        @keyframes alert-scroll {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+        @keyframes btn-pulse {
+          0% { transform: scale(1); box-shadow: 0 0 0 rgba(116,217,255,0); }
+          40% { transform: scale(1.03); box-shadow: 0 0 18px rgba(116,217,255,.34); }
+          100% { transform: scale(1); box-shadow: 0 0 0 rgba(116,217,255,0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .alert-marquee-track { animation: none; }
+          .btn-feedback { animation: none; }
+        }
         @media (max-width: 540px) {
+          .hero-title {
+            margin: 0 2px 8px;
+            font-size: clamp(25px, 7.1vw, 44px);
+          }
           .car-image { height: 190px; }
           .hero { min-height: 165px; }
-          .category h3.category-title-main { font-size: 21px; }
-          .battery-percent { font-size: 30px; min-width: 60px; }
-          .battery-side { min-width: 72px; }
-          .battery-range { font-size: 15px; }
-          .battery-sub { font-size: 15px; }
+          .hero-services-grid {
+            grid-template-columns: repeat(3, 30px);
+            gap: 6px;
+            max-width: 114px;
+            top: 10px;
+            left: 10px;
+          }
+          .hero-battery-badge {
+            top: 10px;
+            right: 10px;
+            min-width: 90px;
+            padding: 6px 8px;
+            border-radius: 10px;
+          }
+          .hero-battery-label { font-size: 10px; }
+          .hero-battery-value { font-size: 19px; }
+          .hero-service-item {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+          }
+          .hero-service-item ha-icon {
+            width: 17px;
+            height: 17px;
+          }
+          .alert-ribbon-inner { padding: 5px 8px; gap: 6px; grid-template-columns: auto minmax(0, 1fr); }
+          .alert-single { font-size: 12px; }
+          .alert-marquee-line { font-size: 12px; }
+          .category h3 { font-size: 19px; }
+          .category h3.category-title-main { font-size: 26px; }
+          .category-title-row { grid-template-columns: 30px 1fr 30px; }
+          .category-title-icon { width: 30px; height: 30px; }
+          .category-title-spacer { width: 30px; height: 30px; }
+          .category-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .battery-head-status { font-size: 17px; }
+          .battery-head-power { font-size: 17px; }
+          .battery-percent { font-size: 38px; min-width: 72px; }
+          .battery-range { font-size: 18px; }
+          .battery-sub { font-size: 14px; }
+          .charging-text { font-size: 15px; }
+          .battery-sub .charge-state { font-size: 15px; }
+          .battery-inline-state { font-size: 12px; padding: 1px 8px; }
           .seat-grid { grid-template-columns: 1fr; }
           .climate-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1122,6 +2015,7 @@ class Byd3DCard extends HTMLElement {
 
     this.shadowRoot.querySelectorAll(".action-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
+        this._flashButtonFeedback(btn);
         const key = btn.getAttribute("data-key");
         const action = btn.getAttribute("data-action");
         if (!key || !action) return;
@@ -1132,15 +2026,19 @@ class Byd3DCard extends HTMLElement {
 
     this.shadowRoot.querySelectorAll(".seat-level").forEach((btn) => {
       btn.addEventListener("click", () => {
+        this._flashButtonFeedback(btn);
         const key = btn.getAttribute("data-seat");
         const option = btn.getAttribute("data-option");
         if (!key || !option) return;
+        this._seatUiOverrides[key] = { option, ts: Date.now() };
+        this._render();
         this._callSelectOption(key, option);
       });
     });
 
     this.shadowRoot.querySelectorAll(".climate-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
+        this._flashButtonFeedback(btn);
         const action = btn.getAttribute("data-climate-action");
         if (!action) return;
         if (action === "power") {
@@ -1172,6 +2070,25 @@ class Byd3DCard extends HTMLElement {
       });
     });
 
+    this.shadowRoot.querySelectorAll(".cat-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._flashButtonFeedback(btn);
+        const key = btn.getAttribute("data-category");
+        if (!key || key === this._activeCategory) return;
+        this._activeCategory = key;
+        this._persistActiveCategory(key);
+        this._render();
+      });
+    });
+
+    this.shadowRoot.querySelectorAll(".hero-service-item.actionable").forEach((item) => {
+      item.addEventListener("click", () => {
+        this._flashButtonFeedback(item);
+        const indicatorId = item.getAttribute("data-indicator");
+        this._handleServiceIndicatorAction(indicatorId);
+      });
+    });
+
     const heroImage = this.shadowRoot.querySelector(".car-image");
     if (heroImage) {
       heroImage.addEventListener("error", () => {
@@ -1187,6 +2104,7 @@ class Byd3DCard extends HTMLElement {
 class Byd3DCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...DEFAULT_CONFIG, ...config, entities: { ...(config.entities || {}) } };
+    this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._render();
   }
 
@@ -1199,6 +2117,115 @@ class Byd3DCardEditor extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._render();
     this._populatePrefixCandidates();
+  }
+
+  _normalizeCategoryOrder(order) {
+    const base = CATEGORY_DEFS.map((c) => c.key);
+    if (!Array.isArray(order) || order.length === 0) return [...base];
+    const cleaned = order.filter((k) => base.includes(k));
+    for (const key of base) {
+      if (!cleaned.includes(key)) cleaned.push(key);
+    }
+    return cleaned;
+  }
+
+  _categoryLabel(key) {
+    const def = CATEGORY_DEFS.find((item) => item.key === key);
+    if (!def) return key;
+    return FALLBACK_I18N[def.labelKey] || def.key;
+  }
+
+  _renderCategoryOrderOptions() {
+    const order = this._normalizeCategoryOrder(this._config.category_order);
+    return order
+      .map((key) => {
+        const def = CATEGORY_DEFS.find((item) => item.key === key);
+        if (!def) return "";
+        return `
+          <div class="category-order-item" draggable="true" data-key="${key}">
+            <div class="category-order-main">
+              <ha-icon icon="${def.icon}"></ha-icon>
+              <span>${this._categoryLabel(key)}</span>
+            </div>
+            <ha-icon class="drag-handle" icon="mdi:drag"></ha-icon>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  _bindCategoryOrderDnD() {
+    if (!this.shadowRoot) return;
+    const items = [...this.shadowRoot.querySelectorAll(".category-order-item")];
+    if (!items.length) return;
+
+    let draggingKey = "";
+
+    const clearDragStates = () => {
+      items.forEach((item) => item.classList.remove("drag-over", "dragging"));
+    };
+
+    items.forEach((item) => {
+      item.addEventListener("dragstart", (event) => {
+        const key = item.getAttribute("data-key");
+        if (!key) return;
+        draggingKey = key;
+        item.classList.add("dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", key);
+        }
+      });
+
+      item.addEventListener("dragend", () => {
+        draggingKey = "";
+        clearDragStates();
+      });
+
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        const targetKey = item.getAttribute("data-key");
+        if (!targetKey || !draggingKey || targetKey === draggingKey) return;
+        item.classList.add("drag-over");
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "move";
+        }
+      });
+
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over");
+      });
+
+      item.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const targetKey = item.getAttribute("data-key");
+        const sourceKey = draggingKey || event.dataTransfer?.getData("text/plain");
+        if (!sourceKey || !targetKey || sourceKey === targetKey) {
+          clearDragStates();
+          return;
+        }
+
+        const nextOrder = this._normalizeCategoryOrder(this._config.category_order);
+        const sourceIndex = nextOrder.indexOf(sourceKey);
+        const targetIndex = nextOrder.indexOf(targetKey);
+        if (sourceIndex < 0 || targetIndex < 0) {
+          clearDragStates();
+          return;
+        }
+
+        const targetRect = item.getBoundingClientRect();
+        const beforeTarget = event.clientY < targetRect.top + targetRect.height / 2;
+
+        nextOrder.splice(sourceIndex, 1);
+        let insertAt = nextOrder.indexOf(targetKey);
+        if (!beforeTarget) insertAt += 1;
+        nextOrder.splice(insertAt, 0, sourceKey);
+
+        clearDragStates();
+        this._emitChange({ category_order: nextOrder });
+        this._render();
+      });
+    });
   }
 
   _renderProfileOptions() {
@@ -1322,6 +2349,14 @@ class Byd3DCardEditor extends HTMLElement {
               <label class="toggle-chip"><input id="show_tires" type="checkbox" ${this._config.show_tires ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_tires}</span></label>
               <label class="toggle-chip"><input id="show_actions" type="checkbox" ${this._config.show_actions ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_actions}</span></label>
               <label class="toggle-chip"><input id="show_location" type="checkbox" ${this._config.show_location ? "checked" : ""}/> <span>${FALLBACK_I18N.settings_show_location}</span></label>
+            </div>
+          </section>
+
+          <section class="group">
+            <div class="group-title">${FALLBACK_I18N.settings_category_order}</div>
+            <div class="order-hint">${FALLBACK_I18N.settings_category_order_hint}</div>
+            <div class="category-order-list">
+              ${this._renderCategoryOrderOptions()}
             </div>
           </section>
         </div>
@@ -1483,6 +2518,57 @@ class Byd3DCardEditor extends HTMLElement {
           display: grid;
           gap: 8px;
         }
+        .order-hint {
+          font-size: 12px;
+          color: rgba(207,225,242,.72);
+        }
+        .category-order-list {
+          display: grid;
+          gap: 8px;
+        }
+        .category-order-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(157,190,220,.16);
+          background: rgba(16,23,32,.66);
+          cursor: grab;
+          user-select: none;
+          transition: border-color .2s ease, background .2s ease, transform .14s ease, box-shadow .2s ease;
+        }
+        .category-order-item:hover {
+          border-color: rgba(77,189,255,.45);
+          background: rgba(24,38,52,.7);
+        }
+        .category-order-item.drag-over {
+          border-color: rgba(35,188,255,.86);
+          box-shadow: 0 0 0 1px rgba(35,188,255,.42) inset, 0 8px 20px rgba(35,188,255,.14);
+        }
+        .category-order-item.dragging {
+          opacity: .65;
+          transform: scale(.985);
+          cursor: grabbing;
+        }
+        .category-order-main {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          font-size: 13px;
+          font-weight: 800;
+          color: #eaf4ff;
+        }
+        .category-order-main ha-icon {
+          --mdc-icon-size: 18px;
+          color: #96cfff;
+        }
+        .drag-handle {
+          --mdc-icon-size: 18px;
+          color: rgba(203,223,242,.76);
+          pointer-events: none;
+        }
         .toggle-chip {
           margin: 0;
           display: flex;
@@ -1572,6 +2658,8 @@ class Byd3DCardEditor extends HTMLElement {
         }
       });
     });
+
+    this._bindCategoryOrderDnD();
   }
 }
 

@@ -69,5 +69,11 @@
   "target_temp": "Целевая температура",
   "max_cool": "Макс. охлаждение",
   "max_heat": "Макс. нагрев",
-  "comfort_21": "Комфорт 21°"
+  "comfort_21": "Комфорт 21°",
+  "alert_header": "Предупреждение авто",
+  "alert_more": "доп. неисправности",
+  "alert_tire_pressure_low": "Низкое давление в шине",
+  "alert_tire_pressure_critical": "Критическое давление в шине",
+  "alert_system_fault": "Системная неисправность",
+  "rapid_tire_leak": "Быстрая утечка воздуха"
 }

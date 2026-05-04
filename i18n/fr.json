@@ -69,5 +69,11 @@
   "target_temp": "Temp. cible",
   "max_cool": "Refroidissement max",
   "max_heat": "Chauffage max",
-  "comfort_21": "Confort 21°"
+  "comfort_21": "Confort 21°",
+  "alert_header": "Alerte véhicule",
+  "alert_more": "autres anomalies",
+  "alert_tire_pressure_low": "Pression pneu faible",
+  "alert_tire_pressure_critical": "Pression pneu critique",
+  "alert_system_fault": "Défaut système",
+  "rapid_tire_leak": "Fuite rapide du pneu"
 }

@@ -69,5 +69,11 @@
   "target_temp": "טמפ׳ יעד",
   "max_cool": "מקסימום קירור",
   "max_heat": "מקסימום חימום",
-  "comfort_21": "נוחות 21°"
+  "comfort_21": "נוחות 21°",
+  "alert_header": "התראת רכב",
+  "alert_more": "תקלות נוספות",
+  "alert_tire_pressure_low": "לחץ אוויר נמוך",
+  "alert_tire_pressure_critical": "לחץ אוויר קריטי",
+  "alert_system_fault": "תקלה במערכת",
+  "rapid_tire_leak": "דליפת אוויר מהירה"
 }
