@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.2";
+const CARD_VERSION = "1.0.3";
 
 const PROFILE_IMAGES = {
   atto3:
@@ -3696,22 +3696,41 @@ class Byd3DCardEditor extends HTMLElement {
   }
 }
 
-if (!customElements.get(CARD_TYPE)) {
-  customElements.define(CARD_TYPE, Byd3DCard);
-}
-if (!customElements.get("byd-3d-card-editor")) {
-  customElements.define("byd-3d-card-editor", Byd3DCardEditor);
+function fireLovelaceRebuild() {
+  const dispatch = (target) => {
+    if (!target || typeof target.dispatchEvent !== "function") return;
+    target.dispatchEvent(new Event("ll-rebuild", { bubbles: true, composed: true }));
+  };
+
+  dispatch(document);
+  dispatch(document.querySelector("home-assistant"));
 }
 
-window.customCards = window.customCards || [];
-if (!window.customCards.find((card) => card.type === CARD_TYPE)) {
-  window.customCards.push({
-    type: CARD_TYPE,
-    name: CARD_NAME,
-    preview: false,
-    description: "Dynamic 3D BYD dashboard card with vehicle profiles.",
-    documentationURL: "https://github.com/jkaberg/hass-byd-vehicle",
-  });
+function registerBydCard() {
+  if (!customElements.get(CARD_TYPE)) {
+    customElements.define(CARD_TYPE, Byd3DCard);
+  }
+  if (!customElements.get("byd-3d-card-editor")) {
+    customElements.define("byd-3d-card-editor", Byd3DCardEditor);
+  }
+
+  window.customCards = window.customCards || [];
+  if (!window.customCards.find((card) => card.type === CARD_TYPE)) {
+    window.customCards.push({
+      type: CARD_TYPE,
+      name: CARD_NAME,
+      preview: false,
+      description: "Dynamic 3D BYD dashboard card with vehicle profiles.",
+      documentationURL: "https://github.com/jkaberg/hass-byd-vehicle",
+    });
+  }
+
+  // Lovelace edit-mode can occasionally miss the initial rebuild event for
+  // freshly loaded custom cards. Triggering rebuild retries helps new-card flow.
+  fireLovelaceRebuild();
+  window.setTimeout(() => fireLovelaceRebuild(), 600);
+  window.setTimeout(() => fireLovelaceRebuild(), 1800);
 }
 
+registerBydCard();
 console.info(`%c ${CARD_NAME} %c ${CARD_VERSION} `, "color:#00e5ff;font-weight:700;", "color:#9fb9c8;");

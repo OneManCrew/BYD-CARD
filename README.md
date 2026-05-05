@@ -40,6 +40,19 @@ Recommended order:
    - Type: `module`
 3. Hard refresh the browser/app.
 
+### If users see "resource not found" or "custom element doesn't exist"
+
+Check these quickly:
+1. Resource URL must be exactly:
+   - `/local/byd-card/byd-3d-card.js`
+2. Resource type must be:
+   - `module`
+3. File must exist on HA host:
+   - `/config/www/byd-card/byd-3d-card.js`
+4. If browser/app cache is stale, add a version query:
+   - `/local/byd-card/byd-3d-card.js?v=1.0.3`
+5. Then hard refresh the browser/app again.
+
 ## Basic YAML
 
 ```yaml
