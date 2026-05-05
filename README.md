@@ -50,7 +50,7 @@ Check these quickly:
 3. File must exist on HA host:
    - `/config/www/byd-card/byd-3d-card.js`
 4. If browser/app cache is stale, add a version query:
-   - `/local/byd-card/byd-3d-card.js?v=1.0.3`
+   - `/local/byd-card/byd-3d-card.js?v=1.0.4`
 5. Then hard refresh the browser/app again.
 
 ## Basic YAML
@@ -69,6 +69,7 @@ show_actions: true
 show_climate: true
 show_vehicle: true
 show_location: true
+tire_pressure_unit: psi
 refresh_interval_seconds: 25
 language: he
 category_order:
@@ -81,6 +82,10 @@ category_order:
 entities: {}
 
 ```
+
+`tire_pressure_unit` options:
+- `psi`
+- `kpa`
 
 ## Files
 

@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.3";
+const CARD_VERSION = "1.0.4";
 
 const PROFILE_IMAGES = {
   atto3:
@@ -206,6 +206,7 @@ const DEFAULT_CONFIG = {
   seat_passenger_mode: "heat",
   show_vehicle: true,
   show_location: true,
+  tire_pressure_unit: "psi",
   refresh_interval_seconds: 25,
   language: "he",
   category_order: ["summary", "climate", "vehicle", "tires", "location", "actions"],
@@ -259,6 +260,13 @@ const FALLBACK_I18N = {
   find_car: "מצא רכב",
   close_windows: "סגור חלונות",
   open_map: "פתח מפה",
+  close: "סגור",
+  map_dialog_title: "מיקום רכב",
+  map_unavailable: "אין נתוני מיקום זמינים",
+  open_in_external_map: "פתח במפה חיצונית",
+  settings_tire_pressure_unit: "יחידת לחץ צמיגים",
+  tire_unit_psi: "PSI",
+  tire_unit_kpa: "kPa",
   seat_heating: "חימום מושבים",
   seat_climate: "מצב מושבים",
   seat_driver: "נהג",
@@ -431,6 +439,11 @@ function normalizeSeatPassengerMode(value, fallbackShowCooling = false) {
   return fallbackShowCooling ? "cool" : "heat";
 }
 
+function normalizeTirePressureUnit(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "kpa" ? "kpa" : "psi";
+}
+
 function fireConfigChanged(element, config) {
   const event = new Event("config-changed", { bubbles: true, composed: true });
   event.detail = { config };
@@ -458,6 +471,7 @@ class Byd3DCard extends HTMLElement {
     );
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
+    this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     if (!this.shadowRoot) {
@@ -471,6 +485,7 @@ class Byd3DCard extends HTMLElement {
       this._seatUiOverrides = {};
     }
     this._confirmation = null;
+    this._locationMapDialog = null;
     this._buttonFeedbacks = new Map();
     this._translations = FALLBACK_I18N;
     this._loadTranslations();
@@ -827,6 +842,62 @@ class Byd3DCard extends HTMLElement {
     return this._t("not_available");
   }
 
+  _tirePressureUnit() {
+    return normalizeTirePressureUnit(this._config?.tire_pressure_unit);
+  }
+
+  _tirePressureUnitLabel(unit) {
+    if (unit === "kpa") return this._t("tire_unit_kpa");
+    return this._t("tire_unit_psi");
+  }
+
+  _normalizePressureSensorUnit(rawUnit) {
+    const unit = String(rawUnit || "").trim().toLowerCase().replace(/\s+/g, "");
+    if (!unit) return null;
+    if (unit === "kpa" || unit === "kilopascal" || unit === "kilopascals") return "kpa";
+    if (unit === "psi") return "psi";
+    if (unit === "bar") return "bar";
+    return null;
+  }
+
+  _convertPressureUnit(value, fromUnit, toUnit) {
+    if (!Number.isFinite(value)) return null;
+    if (fromUnit === toUnit) return value;
+
+    let kpa = value;
+    if (fromUnit === "psi") kpa = value * 6.89476;
+    if (fromUnit === "bar") kpa = value * 100;
+
+    if (toUnit === "kpa") return kpa;
+    if (toUnit === "psi") return kpa * 0.145038;
+    if (toUnit === "bar") return kpa / 100;
+    return value;
+  }
+
+  _tirePressureDisplayValue(logicalKey, unit) {
+    const state = this._state(logicalKey);
+    const value = toNumber(state?.state);
+    if (value === null) return null;
+    const sourceUnit = this._normalizePressureSensorUnit(state?.attributes?.unit_of_measurement) || "kpa";
+    const converted = this._convertPressureUnit(value, sourceUnit, unit);
+    return Number.isFinite(converted) ? converted : null;
+  }
+
+  _tirePressureThresholds(unit) {
+    if (unit === "kpa") {
+      return {
+        critical: 28 * 6.89476,
+        low: 30 * 6.89476,
+      };
+    }
+    return { critical: 28, low: 30 };
+  }
+
+  _formatTirePressure(value, unit) {
+    if (!Number.isFinite(value)) return "-";
+    return unit === "kpa" ? value.toFixed(0) : value.toFixed(1);
+  }
+
   _isTruthyState(raw) {
     const value = String(raw || "").trim().toLowerCase();
     if (!value) return false;
@@ -1073,6 +1144,81 @@ class Byd3DCard extends HTMLElement {
         composed: true,
       })
     );
+  }
+
+  _parseCoordinateValue(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const normalized = raw.replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  _getLocationCoordinates() {
+    const locationState = this._state("location");
+    if (!locationState) return null;
+
+    const attrs = locationState.attributes || {};
+    let lat = this._parseCoordinateValue(attrs.latitude);
+    let lon = this._parseCoordinateValue(attrs.longitude);
+
+    if (lat === null || lon === null) {
+      const raw = String(locationState.state || "").trim();
+      const match = raw.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+      if (match) {
+        lat = this._parseCoordinateValue(match[1]);
+        lon = this._parseCoordinateValue(match[2]);
+      }
+    }
+
+    if (lat === null || lon === null) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return { lat, lon };
+  }
+
+  _buildOsmEmbedUrl(lat, lon) {
+    const delta = 0.008;
+    const minLat = Math.max(-90, lat - delta);
+    const maxLat = Math.min(90, lat + delta);
+    const minLon = Math.max(-180, lon - delta);
+    const maxLon = Math.min(180, lon + delta);
+    const bbox = encodeURIComponent(`${minLon},${minLat},${maxLon},${maxLat}`);
+    const marker = encodeURIComponent(`${lat},${lon}`);
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
+  }
+
+  _buildExternalMapUrl(lat, lon) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+
+  _showLocationMapDialog() {
+    const coords = this._getLocationCoordinates();
+    this._confirmation = null;
+    if (!coords) {
+      this._locationMapDialog = {
+        hasCoordinates: false,
+        embedUrl: "",
+        externalUrl: "",
+      };
+      this._render();
+      return;
+    }
+    this._locationMapDialog = {
+      hasCoordinates: true,
+      embedUrl: this._buildOsmEmbedUrl(coords.lat, coords.lon),
+      externalUrl: this._buildExternalMapUrl(coords.lat, coords.lon),
+      lat: coords.lat,
+      lon: coords.lon,
+    };
+    this._render();
+  }
+
+  _hideLocationMapDialog() {
+    if (!this._locationMapDialog) return;
+    this._locationMapDialog = null;
+    this._render();
   }
 
   _callSelectOption(logicalKey, option) {
@@ -1342,18 +1488,25 @@ class Byd3DCard extends HTMLElement {
       ["tire_rl", this._t("rear_left")],
       ["tire_rr", this._t("rear_right")],
     ];
+    const tirePressureUnit = this._tirePressureUnit();
+    const tirePressureUnitLabel = this._tirePressureUnitLabel(tirePressureUnit);
+    const tirePressureThresholds = this._tirePressureThresholds(tirePressureUnit);
 
     const tireCards = tireKeys
       .map(([key, label]) => {
-        const s = this._state(key);
-        if (!s) return "";
-        const kpa = toNumber(s.state);
-        const psi = kpa === null ? null : kpa * 0.145038;
-        const color = psi === null ? "#8aa0b5" : psi < 28 ? "#ff5a4d" : psi < 30 ? "#ffb252" : "#7ce89e";
+        const pressure = this._tirePressureDisplayValue(key, tirePressureUnit);
+        const color =
+          pressure === null
+            ? "#8aa0b5"
+            : pressure < tirePressureThresholds.critical
+              ? "#ff5a4d"
+              : pressure < tirePressureThresholds.low
+                ? "#ffb252"
+                : "#7ce89e";
         return `
-          <div class="tire-card ${psi !== null && psi < 28 ? "warn" : ""}">
+          <div class="tire-card ${pressure !== null && pressure < tirePressureThresholds.critical ? "warn" : ""}">
             <div class="tire-title">${label}</div>
-            <div class="tire-value" style="color:${color}">${psi === null ? "-" : psi.toFixed(1)} PSI</div>
+            <div class="tire-value" style="color:${color}">${this._formatTirePressure(pressure, tirePressureUnit)} ${tirePressureUnitLabel}</div>
           </div>
         `;
       })
@@ -1363,37 +1516,21 @@ class Byd3DCard extends HTMLElement {
     const addAlert = (message) => {
       if (message && !alerts.includes(message)) alerts.push(message);
     };
-    const tireWarn = (label, psi) => {
-      if (psi === null) return;
-      if (psi < 28) addAlert(`${this._ta("alert_tire_pressure_critical")} - ${label}`);
-      else if (psi < 30) addAlert(`${this._ta("alert_tire_pressure_low")} - ${label}`);
+    const tireWarn = (label, pressure) => {
+      if (pressure === null) return;
+      if (pressure < tirePressureThresholds.critical) addAlert(`${this._ta("alert_tire_pressure_critical")} - ${label}`);
+      else if (pressure < tirePressureThresholds.low) addAlert(`${this._ta("alert_tire_pressure_low")} - ${label}`);
     };
 
-    const flPsi = (() => {
-      const s = this._state("tire_fl");
-      const kpa = toNumber(s?.state);
-      return kpa === null ? null : kpa * 0.145038;
-    })();
-    const frPsi = (() => {
-      const s = this._state("tire_fr");
-      const kpa = toNumber(s?.state);
-      return kpa === null ? null : kpa * 0.145038;
-    })();
-    const rlPsi = (() => {
-      const s = this._state("tire_rl");
-      const kpa = toNumber(s?.state);
-      return kpa === null ? null : kpa * 0.145038;
-    })();
-    const rrPsi = (() => {
-      const s = this._state("tire_rr");
-      const kpa = toNumber(s?.state);
-      return kpa === null ? null : kpa * 0.145038;
-    })();
+    const flPressure = this._tirePressureDisplayValue("tire_fl", tirePressureUnit);
+    const frPressure = this._tirePressureDisplayValue("tire_fr", tirePressureUnit);
+    const rlPressure = this._tirePressureDisplayValue("tire_rl", tirePressureUnit);
+    const rrPressure = this._tirePressureDisplayValue("tire_rr", tirePressureUnit);
 
-    tireWarn(this._ta("front_left"), flPsi);
-    tireWarn(this._ta("front_right"), frPsi);
-    tireWarn(this._ta("rear_left"), rlPsi);
-    tireWarn(this._ta("rear_right"), rrPsi);
+    tireWarn(this._ta("front_left"), flPressure);
+    tireWarn(this._ta("front_right"), frPressure);
+    tireWarn(this._ta("rear_left"), rlPressure);
+    tireWarn(this._ta("rear_right"), rrPressure);
 
     const boolFaultState = (s) => s?.state === "on";
     if (boolFaultState(rapidTireLeakState)) addAlert(`${this._ta("alert_system_fault")} - ${this._ta("rapid_tire_leak")}`);
@@ -1693,6 +1830,41 @@ class Byd3DCard extends HTMLElement {
         </div>
       `
       : "";
+    const locationMapOverlay = this._locationMapDialog
+      ? `
+        <div class="dialog-backdrop map-dialog-backdrop" data-map-dialog-backdrop>
+          <div class="map-dialog-card" role="dialog" aria-modal="true">
+            <div class="map-dialog-header">
+              <div class="map-dialog-title">${this._t("map_dialog_title")}</div>
+              <button class="map-dialog-close-icon" data-map-dialog-action="close" aria-label="${this._t("close")}">
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+            </div>
+            ${
+              this._locationMapDialog.hasCoordinates
+                ? `
+              <iframe
+                class="location-map-frame"
+                src="${this._locationMapDialog.embedUrl}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                allowfullscreen
+              ></iframe>
+            `
+                : `<div class="map-dialog-empty">${this._t("map_unavailable")}</div>`
+            }
+            <div class="map-dialog-actions">
+              ${
+                this._locationMapDialog.externalUrl
+                  ? `<a class="map-dialog-link" href="${this._locationMapDialog.externalUrl}" target="_blank" rel="noopener noreferrer">${this._t("open_in_external_map")}</a>`
+                  : ""
+              }
+              <button class="dialog-btn cancel" data-map-dialog-action="close">${this._t("close")}</button>
+            </div>
+          </div>
+        </div>
+      `
+      : "";
 
     this.shadowRoot.innerHTML = `
       <ha-card>
@@ -1709,6 +1881,7 @@ class Byd3DCard extends HTMLElement {
 
           ${alertRibbon}
           ${confirmationOverlay}
+          ${locationMapOverlay}
 
           <div class="category-tabs" role="radiogroup" aria-label="${this._t("aria_vehicle_categories")}">
             ${visibleTabs
@@ -1868,12 +2041,15 @@ class Byd3DCard extends HTMLElement {
           transform: scale(.96);
         }
         .hero-lock-badge ha-icon {
-          display: block;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           width: 20px;
           height: 20px;
-          line-height: 1;
+          --mdc-icon-size: 20px;
+          line-height: 0;
           margin: 0;
-          transform: translateY(-0.5px);
+          transform: none;
           color: #fff;
         }
         .hero-service-item ha-icon {
@@ -1950,6 +2126,89 @@ class Byd3DCard extends HTMLElement {
         .dialog-btn.confirm {
           background: linear-gradient(180deg, #5cb0ff, #1e5fbf);
           color: #fff;
+        }
+        .map-dialog-backdrop {
+          z-index: 30;
+        }
+        .map-dialog-card {
+          width: min(100%, 760px);
+          border-radius: 24px;
+          padding: 14px;
+          background: linear-gradient(180deg, rgba(8, 13, 22, .98), rgba(5, 9, 15, .99));
+          border: 1px solid rgba(255,255,255,.14);
+          box-shadow: 0 24px 80px rgba(0,0,0,.45);
+          display: grid;
+          gap: 10px;
+        }
+        .map-dialog-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .map-dialog-title {
+          font-size: 18px;
+          font-weight: 900;
+          color: #f4faff;
+        }
+        .map-dialog-close-icon {
+          appearance: none;
+          border: 1px solid rgba(255,255,255,.2);
+          background: rgba(255,255,255,.08);
+          color: #f0f8ff;
+          border-radius: 12px;
+          width: 38px;
+          height: 38px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform .15s ease, filter .15s ease;
+        }
+        .map-dialog-close-icon:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.06);
+        }
+        .map-dialog-close-icon ha-icon {
+          width: 20px;
+          height: 20px;
+        }
+        .location-map-frame {
+          width: 100%;
+          height: min(58vh, 460px);
+          border: 0;
+          border-radius: 16px;
+          background: #0d1723;
+        }
+        .map-dialog-empty {
+          min-height: 190px;
+          border-radius: 16px;
+          border: 1px dashed rgba(255,255,255,.2);
+          background: rgba(255,255,255,.03);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          color: rgba(230,242,255,.84);
+          padding: 14px;
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .map-dialog-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .map-dialog-link {
+          color: #92d9ff;
+          font-size: 14px;
+          font-weight: 800;
+          text-decoration: none;
+        }
+        .map-dialog-link:hover {
+          text-decoration: underline;
         }
         .hero-service-item.tone-cold {
           border-color: rgba(93,201,255,.52);
@@ -2768,6 +3027,17 @@ class Byd3DCard extends HTMLElement {
           .climate-metrics .metric { min-height: 64px; }
           .climate-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
           .climate-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .map-dialog-card {
+            padding: 10px;
+            border-radius: 18px;
+          }
+          .map-dialog-title {
+            font-size: 16px;
+          }
+          .location-map-frame {
+            height: min(52vh, 340px);
+            border-radius: 12px;
+          }
         }
       </style>
     `;
@@ -2783,7 +3053,7 @@ class Byd3DCard extends HTMLElement {
         if (action === "unlock") this._showConfirmation("unlock", { key });
         if (action === "climate_on") this._callClimatePower(true);
         if (action === "climate_off") this._callClimatePower(false);
-        if (action === "location_map") this._openMoreInfo("location");
+        if (action === "location_map") this._showLocationMapDialog();
         if (action === "press") {
           this._callButton(key);
           if (this._buttonFeedbacks) {
@@ -2881,6 +3151,12 @@ class Byd3DCard extends HTMLElement {
       });
     });
 
+    this.shadowRoot.querySelectorAll("[data-map-dialog-backdrop]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) this._hideLocationMapDialog();
+      });
+    });
+
     this.shadowRoot.querySelectorAll(".dialog-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const action = btn.getAttribute("data-dialog-action");
@@ -2893,6 +3169,15 @@ class Byd3DCard extends HTMLElement {
             this._callLock(this._confirmation.key, true);
           }
           this._hideConfirmation();
+        }
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-map-dialog-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-map-dialog-action");
+        if (action === "close") {
+          this._hideLocationMapDialog();
         }
       });
     });
@@ -2918,6 +3203,7 @@ class Byd3DCardEditor extends HTMLElement {
     );
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
+    this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     this._render();
@@ -3226,6 +3512,13 @@ class Byd3DCardEditor extends HTMLElement {
               />
               <small>${this._t("settings_refresh_interval_hint")}</small>
             </div>
+            <div class="field">
+              <label>${this._t("settings_tire_pressure_unit")}</label>
+              <select id="tire_pressure_unit">
+                <option value="psi" ${normalizeTirePressureUnit(this._config.tire_pressure_unit) === "psi" ? "selected" : ""}>${this._t("tire_unit_psi")}</option>
+                <option value="kpa" ${normalizeTirePressureUnit(this._config.tire_pressure_unit) === "kpa" ? "selected" : ""}>${this._t("tire_unit_kpa")}</option>
+              </select>
+            </div>
           </section>
 
           <section class="group">
@@ -3321,7 +3614,8 @@ class Byd3DCardEditor extends HTMLElement {
           color: #f4f8fc;
         }
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        select {
           border: 1px solid rgba(157,190,220,.18);
           background: linear-gradient(180deg, rgba(17,23,33,.72), rgba(13,18,27,.82));
           border-radius: 14px;
@@ -3332,7 +3626,8 @@ class Byd3DCardEditor extends HTMLElement {
           transition: border-color .2s ease, box-shadow .2s ease, transform .1s ease;
         }
         input[type="text"]:focus,
-        input[type="number"]:focus {
+        input[type="number"]:focus,
+        select:focus {
           outline: none;
           border-color: rgba(0,184,255,.75);
           box-shadow: 0 0 0 2px rgba(0,184,255,.22), 0 10px 24px rgba(0,184,255,.12);
@@ -3625,6 +3920,7 @@ class Byd3DCardEditor extends HTMLElement {
         image_url: this.shadowRoot.getElementById("image_url").value.trim(),
         image_base_path: this.shadowRoot.getElementById("image_base_path").value.trim() || "/local/byd-card/pic",
         i18n_base_path: this.shadowRoot.getElementById("i18n_base_path").value.trim() || "/local/byd-card/i18n",
+        tire_pressure_unit: normalizeTirePressureUnit(this.shadowRoot.getElementById("tire_pressure_unit").value),
         show_climate: this.shadowRoot.getElementById("show_climate").checked,
         show_seat_cooling:
           normalizeSeatPassengerMode(this._config?.seat_passenger_mode, Boolean(this._config?.show_seat_cooling)) ===
@@ -3642,6 +3938,7 @@ class Byd3DCardEditor extends HTMLElement {
     this.shadowRoot.getElementById("image_base_path").addEventListener("change", onChange);
     this.shadowRoot.getElementById("i18n_base_path").addEventListener("change", onChange);
     this.shadowRoot.getElementById("refresh_interval_seconds").addEventListener("change", onChange);
+    this.shadowRoot.getElementById("tire_pressure_unit").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_climate").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_vehicle").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_tires").addEventListener("change", onChange);
