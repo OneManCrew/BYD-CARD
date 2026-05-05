@@ -50,7 +50,7 @@ Check these quickly:
 3. File must exist on HA host:
    - `/config/www/byd-card/byd-3d-card.js`
 4. If browser/app cache is stale, add a version query:
-   - `/local/byd-card/byd-3d-card.js?v=1.0.4`
+   - `/local/byd-card/byd-3d-card.js?v=1.0.5`
 5. Then hard refresh the browser/app again.
 
 ## Basic YAML

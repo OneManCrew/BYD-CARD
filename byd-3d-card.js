@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.4";
+const CARD_VERSION = "1.0.5";
 
 const PROFILE_IMAGES = {
   atto3:
