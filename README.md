@@ -33,7 +33,21 @@ Recommended order:
 
 ## Install
 
-1. Copy this repository folder to Home Assistant:
+### HACS (recommended)
+
+1. Install from HACS as a `Dashboard` repository.
+2. Add Lovelace resource (if not added automatically):
+   - `/hacsfiles/<repository-name>/byd-3d-card.js`
+   - Type: `module`
+3. Hard refresh the browser/app.
+
+Important:
+- This repository ships `dist/` with `byd-3d-card.js`, `pic/`, and `i18n/`.
+- HACS downloads from `dist/`, so vehicle images and language files are included.
+
+### Manual install
+
+1. Copy `dist/` contents to:
    - `/config/www/byd-card/`
 2. Add Lovelace resource:
    - URL: `/local/byd-card/byd-3d-card.js`
@@ -44,13 +58,15 @@ Recommended order:
 
 Check these quickly:
 1. Resource URL must be exactly:
-   - `/local/byd-card/byd-3d-card.js`
+   - Manual install: `/local/byd-card/byd-3d-card.js`
+   - HACS install: `/hacsfiles/<repository-name>/byd-3d-card.js`
 2. Resource type must be:
    - `module`
 3. File must exist on HA host:
-   - `/config/www/byd-card/byd-3d-card.js`
+   - Manual install: `/config/www/byd-card/byd-3d-card.js`
+   - HACS install: `/config/www/community/<repository-name>/byd-3d-card.js`
 4. If browser/app cache is stale, add a version query:
-   - `/local/byd-card/byd-3d-card.js?v=1.0.5`
+   - `/hacsfiles/<repository-name>/byd-3d-card.js?v=1.0.6`
 5. Then hard refresh the browser/app again.
 
 ## Basic YAML
@@ -62,8 +78,6 @@ title: Moshiko BYD ATTO 3
 title_font_size: 35
 entity_prefix: byd_atto_3
 image_url: ""
-image_base_path: /local/byd-card/pic
-i18n_base_path: /local/byd-card/i18n
 show_tires: true
 show_actions: true
 show_climate: true
@@ -89,9 +103,9 @@ entities: {}
 
 ## Files
 
-- `byd-3d-card.js` - main custom card file
-- `i18n/*.json` - language files
-- `pic/` - profile images
+- `dist/byd-3d-card.js` - main custom card file for HACS/manual runtime
+- `dist/i18n/*.json` - language files shipped with the card
+- `dist/pic/` - profile images shipped with the card
 
 ## Profile images (in this repo)
 
@@ -200,4 +214,5 @@ What it shows:
   - For `sensor.byd_atto_3_battery_level`, use `byd_atto_3`.
 - Language files are loaded from:
   - `i18n_base_path/<language>.json`
+- By default, `image_base_path` and `i18n_base_path` are auto-detected from the loaded card URL, so HACS/manual installs work without extra path config.
 - If local profile image is missing, the card falls back to built-in SVG.
