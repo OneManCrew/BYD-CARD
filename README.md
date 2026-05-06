@@ -37,13 +37,14 @@ Recommended order:
 
 1. Install from HACS as a `Dashboard` repository.
 2. Add Lovelace resource (if not added automatically):
-   - `/hacsfiles/<repository-name>/byd-3d-card.js`
+   - `/hacsfiles/<repository-name>/byd-3d-card-hacs.js`
    - Type: `module`
 3. Hard refresh the browser/app.
 
 Important:
-- This repository ships `dist/` with `byd-3d-card.js`, `pic/`, and `i18n/`.
-- HACS downloads from `dist/`, so vehicle images and language files are included.
+- This repository ships `dist/` with a flat file layout (no nested folders).
+- HACS downloads dashboard files from `dist/`, and nested directories are not reliably copied for this type.
+- Images and language files are shipped as root files in `dist/` to ensure they are copied.
 
 ### Manual install
 
@@ -59,14 +60,14 @@ Important:
 Check these quickly:
 1. Resource URL must be exactly:
    - Manual install: `/local/byd-card/byd-3d-card.js`
-   - HACS install: `/hacsfiles/<repository-name>/byd-3d-card.js`
+   - HACS install: `/hacsfiles/<repository-name>/byd-3d-card-hacs.js`
 2. Resource type must be:
    - `module`
 3. File must exist on HA host:
    - Manual install: `/config/www/byd-card/byd-3d-card.js`
-   - HACS install: `/config/www/community/<repository-name>/byd-3d-card.js`
+   - HACS install: `/config/www/community/<repository-name>/byd-3d-card-hacs.js`
 4. If browser/app cache is stale, add a version query:
-   - `/hacsfiles/<repository-name>/byd-3d-card.js?v=1.0.6`
+   - `/hacsfiles/<repository-name>/byd-3d-card-hacs.js?v=1.0.7`
 5. Then hard refresh the browser/app again.
 
 ## Basic YAML
@@ -104,8 +105,9 @@ entities: {}
 ## Files
 
 - `dist/byd-3d-card.js` - main custom card file for HACS/manual runtime
-- `dist/i18n/*.json` - language files shipped with the card
-- `dist/pic/` - profile images shipped with the card
+- `dist/byd-3d-card-hacs.js` - HACS-specific entry file
+- `dist/*.json` - language files shipped with the card
+- `dist/*.png` - profile images shipped with the card
 
 ## Profile images (in this repo)
 

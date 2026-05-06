@@ -13,6 +13,28 @@ jobs:
   validate-hacs:
     runs-on: "ubuntu-latest"
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify HACS dist layout
+        run: |
+          set -euo pipefail
+          test -f hacs.json
+          test -f dist/byd-3d-card-hacs.js
+          test -f dist/byd-3d-card.js
+          test -f dist/bydatoo3.png
+          test -f dist/byd_dolphin.png
+          test -f dist/seal.png
+          test -f dist/sealion.png
+          test -f dist/he.json
+          test -f dist/en.json
+          test -f dist/ru.json
+          test -f dist/fr.json
+          if find dist -mindepth 2 -type f | grep -q .; then
+            echo "Nested files under dist are not allowed for this HACS plugin layout."
+            exit 1
+          fi
+
       - name: HACS validation
         uses: "hacs/action@main"
         with:

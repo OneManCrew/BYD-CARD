@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.6";
+const CARD_VERSION = "1.0.7";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -13,8 +13,10 @@ const DEFAULT_ASSET_BASE_PATH = (() => {
     return "/local/byd-card";
   }
 })();
-const DEFAULT_IMAGE_BASE_PATH = `${DEFAULT_ASSET_BASE_PATH}/pic`;
-const DEFAULT_I18N_BASE_PATH = `${DEFAULT_ASSET_BASE_PATH}/i18n`;
+const DEFAULT_IMAGE_BASE_PATH = DEFAULT_ASSET_BASE_PATH;
+const DEFAULT_I18N_BASE_PATH = DEFAULT_ASSET_BASE_PATH;
+const LEGACY_IMAGE_BASE_PATHS = new Set(["/local/byd-card/pic", `${DEFAULT_ASSET_BASE_PATH}/pic`]);
+const LEGACY_I18N_BASE_PATHS = new Set(["/local/byd-card/i18n", `${DEFAULT_ASSET_BASE_PATH}/i18n`]);
 
 const PROFILE_IMAGES = {
   atto3:
@@ -454,6 +456,20 @@ function normalizeTirePressureUnit(value) {
   return raw === "kpa" ? "kpa" : "psi";
 }
 
+function normalizeImageBasePath(value) {
+  const cleaned = String(value || "").trim().replace(/\/$/, "");
+  if (!cleaned) return DEFAULT_IMAGE_BASE_PATH;
+  if (LEGACY_IMAGE_BASE_PATHS.has(cleaned)) return DEFAULT_IMAGE_BASE_PATH;
+  return cleaned;
+}
+
+function normalizeI18nBasePath(value) {
+  const cleaned = String(value || "").trim().replace(/\/$/, "");
+  if (!cleaned) return DEFAULT_I18N_BASE_PATH;
+  if (LEGACY_I18N_BASE_PATHS.has(cleaned)) return DEFAULT_I18N_BASE_PATH;
+  return cleaned;
+}
+
 function fireConfigChanged(element, config) {
   const event = new Event("config-changed", { bubbles: true, composed: true });
   event.detail = { config };
@@ -482,6 +498,8 @@ class Byd3DCard extends HTMLElement {
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
+    this._config.image_base_path = normalizeImageBasePath(this._config.image_base_path);
+    this._config.i18n_base_path = normalizeI18nBasePath(this._config.i18n_base_path);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     if (!this.shadowRoot) {
@@ -3214,6 +3232,8 @@ class Byd3DCardEditor extends HTMLElement {
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
+    this._config.image_base_path = normalizeImageBasePath(this._config.image_base_path);
+    this._config.i18n_base_path = normalizeI18nBasePath(this._config.i18n_base_path);
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     this._render();
