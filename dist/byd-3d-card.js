@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.9";
+const CARD_VERSION = "1.0.10";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -5204,23 +5204,33 @@ class Byd3DCardEditor extends HTMLElement {
         ),
       });
 
-    this.shadowRoot.getElementById("title").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("title_font_size").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("prefix").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("image_url").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("image_base_path").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("i18n_base_path").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("refresh_interval_seconds").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("tire_pressure_unit").addEventListener("change", onChange);
-
-    this.shadowRoot.querySelectorAll("[data-external-toggle]").forEach((btn) => {
-      btn.addEventListener("click", (ev) => {
+    if (!this._editorClickDelegationBound) {
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+        const toggleBtn = path.find(
+          (node) => node instanceof HTMLElement && node.hasAttribute && node.hasAttribute("data-external-toggle")
+        );
+        if (!toggleBtn) return;
         ev.preventDefault();
         ev.stopPropagation();
         this._externalSectionExpanded = !this._externalSectionExpanded;
         this._render();
       });
-    });
+      this._editorClickDelegationBound = true;
+    }
+
+    const bindChange = (id) => {
+      this.shadowRoot.getElementById(id)?.addEventListener("change", onChange);
+    };
+
+    bindChange("title");
+    bindChange("title_font_size");
+    bindChange("prefix");
+    bindChange("image_url");
+    bindChange("image_base_path");
+    bindChange("i18n_base_path");
+    bindChange("refresh_interval_seconds");
+    bindChange("tire_pressure_unit");
 
     const entitiesSearch = this.shadowRoot.getElementById("custom_entities_search");
     if (entitiesSearch) {
@@ -5230,12 +5240,12 @@ class Byd3DCardEditor extends HTMLElement {
       });
     }
 
-    this.shadowRoot.getElementById("show_external_entities")?.addEventListener("change", onChange);
-    this.shadowRoot.getElementById("show_climate").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("show_vehicle").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("show_tires").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("show_actions").addEventListener("change", onChange);
-    this.shadowRoot.getElementById("show_location").addEventListener("change", onChange);
+    bindChange("show_external_entities");
+    bindChange("show_climate");
+    bindChange("show_vehicle");
+    bindChange("show_tires");
+    bindChange("show_actions");
+    bindChange("show_location");
 
     this.shadowRoot.querySelectorAll("[data-add-custom-entity]").forEach((btn) => {
       btn.addEventListener("click", () => {
