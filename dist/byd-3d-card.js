@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.7";
+const CARD_VERSION = "1.0.8";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -218,10 +218,14 @@ const DEFAULT_CONFIG = {
   seat_passenger_mode: "heat",
   show_vehicle: true,
   show_location: true,
+  show_external_entities: true,
   tire_pressure_unit: "psi",
   refresh_interval_seconds: 25,
   language: "he",
   category_order: ["summary", "climate", "vehicle", "tires", "location", "actions"],
+  custom_entities: [],
+  custom_entity_names: {},
+  custom_entity_icons: {},
   entities: {},
 };
 
@@ -232,6 +236,64 @@ const CATEGORY_DEFS = [
   { key: "tires", labelKey: "category_tires", icon: "mdi:car-tire-alert" },
   { key: "location", labelKey: "category_location", icon: "mdi:map-marker-radius" },
   { key: "actions", labelKey: "category_actions", icon: "mdi:gesture-tap-button" },
+];
+
+const MDI_ICON_SUGGESTIONS = [
+  "mdi:script-text-outline",
+  "mdi:gate-open",
+  "mdi:gate",
+  "mdi:garage-open",
+  "mdi:garage",
+  "mdi:lightbulb",
+  "mdi:lightbulb-outline",
+  "mdi:toggle-switch-outline",
+  "mdi:power",
+  "mdi:power-plug",
+  "mdi:flash",
+  "mdi:flash-outline",
+  "mdi:window-open-variant",
+  "mdi:window-closed-variant",
+  "mdi:blinds-open",
+  "mdi:blinds",
+  "mdi:door-open",
+  "mdi:door-closed",
+  "mdi:lock-open-variant-outline",
+  "mdi:lock",
+  "mdi:security",
+  "mdi:cctv",
+  "mdi:camera",
+  "mdi:air-conditioner",
+  "mdi:fan",
+  "mdi:weather-night",
+  "mdi:white-balance-sunny",
+  "mdi:weather-partly-cloudy",
+  "mdi:home",
+  "mdi:home-outline",
+  "mdi:home-automation",
+  "mdi:robot",
+  "mdi:calendar-check",
+  "mdi:bell",
+  "mdi:bell-ring",
+  "mdi:alarm-light",
+  "mdi:playlist-play",
+  "mdi:play",
+  "mdi:pause",
+  "mdi:stop",
+  "mdi:cast",
+  "mdi:television",
+  "mdi:speaker",
+  "mdi:music",
+  "mdi:car",
+  "mdi:car-electric",
+  "mdi:map-marker",
+  "mdi:map-search",
+  "mdi:water",
+  "mdi:water-pump",
+  "mdi:shower",
+  "mdi:sprinkler",
+  "mdi:leaf",
+  "mdi:flower",
+  "mdi:tree",
 ];
 
 const TRANSLATION_CACHE = new Map();
@@ -324,8 +386,45 @@ const FALLBACK_I18N = {
   settings_seat_mode: "מצב מושב נוסע",
   seat_mode_heat: "חימום",
   seat_mode_cool: "קירור",
+  seat_mode_both: "שניהם",
   settings_show_vehicle: "הצג רכב",
   settings_show_location: "הצג מיקום",
+  settings_external_actions: "פעולות חיצוניות",
+  settings_show_external_entities: "הפעל פעולות חיצוניות",
+  settings_external_config_open: "פתח הגדרות",
+  settings_external_config_close: "סגור הגדרות",
+  settings_external_customize_open: "ערוך שמות ואייקונים",
+  settings_external_customize_close: "הסתר עריכת שמות ואייקונים",
+  settings_external_selected_count: "יישויות שנבחרו",
+  settings_external_entities: "ישויות להפעלה",
+  settings_external_entities_hint: "בחירה מרובה (מכל דומיין). לחיצה על האייקון בתמונה תפתח פופ-אפ פעולות.",
+  settings_external_entities_search_placeholder: "חפש ישויות בשם או ב-ID",
+  settings_external_entities_available: "ישויות זמינות",
+  settings_external_entities_selected: "ישויות נבחרות",
+  settings_external_icons: "אייקונים מותאמים",
+  settings_external_icons_hint: "לכל ישות אפשר להגדיר אייקון Material Design, לדוגמה: mdi:gate-open",
+  settings_external_icon_placeholder: "mdi:script-text-outline",
+  settings_external_name_placeholder: "שם תצוגה ליישות",
+  settings_external_name_label: "שם",
+  settings_external_icon_label: "אייקון",
+  external_actions_title: "פעולות מהבית",
+  external_actions_subtitle: "בחר פעולה להפעלה מהירה",
+  external_actions_empty: "לא נבחרו ישויות",
+  open_external_actions: "פתח פעולות חיצוניות",
+  add_external_entity: "הוסף יישות",
+  state_on: "דולק",
+  state_off: "כבוי",
+  state_open: "פתוח",
+  state_closed: "סגור",
+  state_opening: "נפתח",
+  state_closing: "נסגר",
+  state_running: "פועל",
+  state_idle: "מוכן",
+  state_unavailable: "לא זמין",
+  state_playing: "מנגן",
+  state_paused: "מושהה",
+  state_locked: "נעול",
+  state_unlocked: "פתוח",
   climate_controls: "שליטת מזגן",
   turn_on: "הדלק",
   turn_off: "כבה",
@@ -456,6 +555,10 @@ function normalizeTirePressureUnit(value) {
   return raw === "kpa" ? "kpa" : "psi";
 }
 
+function normalizeExternalEntitiesEnabled(value) {
+  return value !== false;
+}
+
 function normalizeImageBasePath(value) {
   const cleaned = String(value || "").trim().replace(/\/$/, "");
   if (!cleaned) return DEFAULT_IMAGE_BASE_PATH;
@@ -468,6 +571,73 @@ function normalizeI18nBasePath(value) {
   if (!cleaned) return DEFAULT_I18N_BASE_PATH;
   if (LEGACY_I18N_BASE_PATHS.has(cleaned)) return DEFAULT_I18N_BASE_PATH;
   return cleaned;
+}
+
+function normalizeCustomEntities(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of value) {
+    const eid = String(item || "").trim();
+    if (!eid || !eid.includes(".")) continue;
+    if (seen.has(eid)) continue;
+    seen.add(eid);
+    out.push(eid);
+  }
+  return out;
+}
+
+function normalizeCustomEntityIcons(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out = {};
+  for (const [entityId, iconRaw] of Object.entries(value)) {
+    const eid = String(entityId || "").trim();
+    const icon = String(iconRaw || "").trim();
+    if (!eid || !eid.includes(".") || !icon) continue;
+    out[eid] = icon;
+  }
+  return out;
+}
+
+function normalizeCustomEntityNames(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out = {};
+  for (const [entityId, nameRaw] of Object.entries(value)) {
+    const eid = String(entityId || "").trim();
+    const name = String(nameRaw || "").trim();
+    if (!eid || !eid.includes(".") || !name) continue;
+    out[eid] = name;
+  }
+  return out;
+}
+
+function pruneCustomEntityIcons(iconMap, selectedEntities) {
+  const normalizedMap = normalizeCustomEntityIcons(iconMap);
+  const allowed = new Set(normalizeCustomEntities(selectedEntities));
+  const out = {};
+  for (const [entityId, icon] of Object.entries(normalizedMap)) {
+    if (allowed.has(entityId)) out[entityId] = icon;
+  }
+  return out;
+}
+
+function pruneCustomEntityNames(nameMap, selectedEntities) {
+  const normalizedMap = normalizeCustomEntityNames(nameMap);
+  const allowed = new Set(normalizeCustomEntities(selectedEntities));
+  const out = {};
+  for (const [entityId, name] of Object.entries(normalizedMap)) {
+    if (allowed.has(entityId)) out[entityId] = name;
+  }
+  return out;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function fireConfigChanged(element, config) {
@@ -496,10 +666,20 @@ class Byd3DCard extends HTMLElement {
       Boolean(config?.show_seat_cooling)
     );
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
+    this._config.show_external_entities = normalizeExternalEntitiesEnabled(this._config.show_external_entities);
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
     this._config.image_base_path = normalizeImageBasePath(this._config.image_base_path);
     this._config.i18n_base_path = normalizeI18nBasePath(this._config.i18n_base_path);
+    this._config.custom_entities = normalizeCustomEntities(this._config.custom_entities);
+    this._config.custom_entity_names = pruneCustomEntityNames(
+      this._config.custom_entity_names,
+      this._config.custom_entities
+    );
+    this._config.custom_entity_icons = pruneCustomEntityIcons(
+      this._config.custom_entity_icons,
+      this._config.custom_entities
+    );
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     if (!this.shadowRoot) {
@@ -514,7 +694,11 @@ class Byd3DCard extends HTMLElement {
     }
     this._confirmation = null;
     this._locationMapDialog = null;
+    this._customEntitiesDialogOpen = false;
     this._buttonFeedbacks = new Map();
+    if (!this._config.show_external_entities) {
+      this._customEntitiesDialogOpen = false;
+    }
     this._translations = FALLBACK_I18N;
     this._loadTranslations();
     this._render();
@@ -590,7 +774,8 @@ class Byd3DCard extends HTMLElement {
     const ids = logicalKeys
       .map((key) => this._resolveEntity(key))
       .filter(Boolean);
-    return [...new Set(ids)];
+    const customIds = this._customEntities().filter((entityId) => Boolean(this._hass?.states?.[entityId]));
+    return [...new Set([...ids, ...customIds])];
   }
 
   _refreshStateEntities(force = false) {
@@ -757,6 +942,14 @@ class Byd3DCard extends HTMLElement {
     ];
 
     const values = keys.map((key) => this._snapshotStateValue(key));
+    for (const entityId of this._customEntities()) {
+      const st = this._hass?.states?.[entityId];
+      if (!st) {
+        values.push(`custom:${entityId}:na`);
+        continue;
+      }
+      values.push(`custom:${entityId}:${st.state}|${st.attributes?.icon ?? ""}|${st.attributes?.unit_of_measurement ?? ""}`);
+    }
     values.push(`lang:${this._language()}`);
     values.push(`cat:${this._activeCategory || "summary"}`);
     return values.join("||");
@@ -1160,6 +1353,176 @@ class Byd3DCard extends HTMLElement {
     if (!eid || !this._hass) return;
     this._hass.callService("button", "press", { entity_id: eid });
     this._schedulePostActionRefresh();
+  }
+
+  _customEntities() {
+    if (!normalizeExternalEntitiesEnabled(this._config?.show_external_entities)) return [];
+    return normalizeCustomEntities(this._config?.custom_entities);
+  }
+
+  _customEntityLabel(entityId) {
+    const customName = String(this._config?.custom_entity_names?.[entityId] || "").trim();
+    if (customName) return customName;
+    const stateObj = this._hass?.states?.[entityId];
+    const named = stateObj?.attributes?.friendly_name;
+    if (named) return String(named);
+    const objectId = entityId.includes(".") ? entityId.split(".")[1] : entityId;
+    return String(objectId)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  _customEntityIcon(entityId) {
+    const customIcon = String(this._config?.custom_entity_icons?.[entityId] || "").trim();
+    if (customIcon) return customIcon;
+    const stateObj = this._hass?.states?.[entityId];
+    const icon = stateObj?.attributes?.icon;
+    if (icon) return icon;
+    const domain = String(entityId || "").split(".")[0] || "";
+    const map = {
+      script: "mdi:script-text-outline",
+      scene: "mdi:palette-outline",
+      light: "mdi:lightbulb",
+      switch: "mdi:toggle-switch-outline",
+      button: "mdi:gesture-tap-button",
+      cover: "mdi:garage-variant",
+      lock: "mdi:lock",
+      fan: "mdi:fan",
+      climate: "mdi:air-conditioner",
+      media_player: "mdi:cast",
+      input_boolean: "mdi:toggle-switch",
+      automation: "mdi:robot",
+    };
+    return map[domain] || "mdi:flash";
+  }
+
+  _customEntityStateText(rawState) {
+    const state = String(rawState || "").trim().toLowerCase();
+    const known = {
+      on: this._t("state_on"),
+      off: this._t("state_off"),
+      open: this._t("state_open"),
+      closed: this._t("state_closed"),
+      opening: this._t("state_opening"),
+      closing: this._t("state_closing"),
+      unavailable: this._t("state_unavailable"),
+      unknown: this._t("state_unavailable"),
+      playing: this._t("state_playing"),
+      paused: this._t("state_paused"),
+      locked: this._t("state_locked"),
+      unlocked: this._t("state_unlocked"),
+    };
+    if (known[state]) return known[state];
+    if (!state) return this._t("state_unavailable");
+    return state
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  _customEntityStatus(entityId) {
+    const stateObj = this._hass?.states?.[entityId];
+    if (!stateObj) {
+      return { tone: "unavailable", label: this._t("state_unavailable"), active: false };
+    }
+
+    const [domain] = String(entityId || "").split(".");
+    const state = String(stateObj.state || "").trim().toLowerCase();
+    const unit = stateObj.attributes?.unit_of_measurement;
+
+    if (!state || state === "unknown" || state === "unavailable") {
+      return { tone: "unavailable", label: this._t("state_unavailable"), active: false };
+    }
+
+    if (domain === "lock") {
+      if (state === "locked") return { tone: "active", label: this._t("state_locked"), active: true };
+      if (state === "unlocked") return { tone: "warn", label: this._t("state_unlocked"), active: true };
+      return { tone: "info", label: this._customEntityStateText(state), active: false };
+    }
+
+    if (domain === "cover") {
+      if (state === "open") return { tone: "warn", label: this._t("state_open"), active: true };
+      if (state === "closed") return { tone: "inactive", label: this._t("state_closed"), active: false };
+      if (state === "opening") return { tone: "info", label: this._t("state_opening"), active: true };
+      if (state === "closing") return { tone: "info", label: this._t("state_closing"), active: true };
+      return { tone: "info", label: this._customEntityStateText(state), active: false };
+    }
+
+    if (domain === "media_player") {
+      if (state === "playing") return { tone: "active", label: this._t("state_playing"), active: true };
+      if (state === "paused") return { tone: "info", label: this._t("state_paused"), active: false };
+      if (state === "off" || state === "idle") return { tone: "inactive", label: this._customEntityStateText(state), active: false };
+      return { tone: "info", label: this._customEntityStateText(state), active: false };
+    }
+
+    if (domain === "climate") {
+      if (state === "off") return { tone: "inactive", label: this._t("state_off"), active: false };
+      return { tone: "active", label: this._customEntityStateText(state), active: true };
+    }
+
+    if (domain === "script" || domain === "automation") {
+      if (state === "on") return { tone: "active", label: this._t("state_running"), active: true };
+      if (state === "off") return { tone: "inactive", label: this._t("state_idle"), active: false };
+      return { tone: "info", label: this._customEntityStateText(state), active: false };
+    }
+
+    if (domain === "scene" || domain === "button") {
+      return { tone: "info", label: this._t("state_idle"), active: false };
+    }
+
+    if (state === "on") return { tone: "active", label: this._t("state_on"), active: true };
+    if (state === "off") return { tone: "inactive", label: this._t("state_off"), active: false };
+    if (state === "home") return { tone: "active", label: this._customEntityStateText(state), active: true };
+    if (state === "not_home") return { tone: "inactive", label: this._customEntityStateText(state), active: false };
+
+    const numeric = Number(stateObj.state);
+    if (Number.isFinite(numeric)) {
+      const formatted = unit ? `${numeric} ${unit}` : `${numeric}`;
+      return { tone: "info", label: formatted, active: numeric > 0 };
+    }
+
+    return { tone: "info", label: this._customEntityStateText(stateObj.state), active: false };
+  }
+
+  _callCustomEntity(entityId) {
+    if (!this._hass || !entityId) return;
+    const [domain] = String(entityId).split(".");
+    if (!domain) return;
+    if (domain === "button") {
+      this._hass.callService("button", "press", { entity_id: entityId });
+      this._schedulePostActionRefresh();
+      return;
+    }
+    if (domain === "scene" || domain === "script" || domain === "automation") {
+      this._hass.callService(domain, "turn_on", { entity_id: entityId });
+      this._schedulePostActionRefresh();
+      return;
+    }
+    if (domain === "lock") {
+      const state = this._hass.states?.[entityId]?.state;
+      const isLocked = state === "locked" || state === "off";
+      this._hass.callService("lock", isLocked ? "unlock" : "lock", { entity_id: entityId });
+      this._schedulePostActionRefresh();
+      return;
+    }
+    if (domain === "cover") {
+      this._hass.callService("cover", "toggle", { entity_id: entityId });
+      this._schedulePostActionRefresh();
+      return;
+    }
+    this._hass.callService("homeassistant", "toggle", { entity_id: entityId });
+    this._schedulePostActionRefresh();
+  }
+
+  _showCustomEntitiesDialog() {
+    if (!this._customEntities().length) return;
+    this._customEntitiesDialogOpen = true;
+    this._render();
+  }
+
+  _hideCustomEntitiesDialog() {
+    if (!this._customEntitiesDialogOpen) return;
+    this._customEntitiesDialogOpen = false;
+    this._render();
   }
 
   _openMoreInfo(logicalKey) {
@@ -1648,6 +2011,7 @@ class Byd3DCard extends HTMLElement {
       pushIndicator("charging", "mdi:ev-station", this._t("charging"), "cold");
     }
     const visibleServiceIndicators = serviceIndicators.slice(0, 3);
+    const customEntities = this._customEntities();
     const heroBatteryOverlay = `
       <div class="hero-battery-badge ${lowBattery ? "low" : ""}">
         <span class="hero-battery-label">${this._t("battery_status")}</span>
@@ -1658,6 +2022,13 @@ class Byd3DCard extends HTMLElement {
       ? `
         <div class="hero-lock-badge actionable ${lockState.state === "unlocked" || lockState.state === "on" ? "warn" : "ok"}" title="${this._boolLabel(lockState.state)}" data-key="lock">
           <ha-icon icon="${lockState.state === "unlocked" || lockState.state === "on" ? "mdi:lock-open-variant-outline" : "mdi:lock"}"></ha-icon>
+        </div>
+      `
+      : "";
+    const heroCustomBadge = customEntities.length
+      ? `
+        <div class="hero-custom-badge actionable" title="${this._t("open_external_actions")}" data-hero-custom-actions>
+          <ha-icon icon="mdi:script-text-outline"></ha-icon>
         </div>
       `
       : "";
@@ -1893,6 +2264,42 @@ class Byd3DCard extends HTMLElement {
         </div>
       `
       : "";
+    const customEntitiesOverlay = this._customEntitiesDialogOpen
+      ? `
+        <div class="dialog-backdrop custom-actions-backdrop" data-custom-dialog-backdrop>
+          <div class="custom-actions-dialog-card" role="dialog" aria-modal="true">
+            <div class="custom-actions-dialog-header">
+              <div class="custom-actions-dialog-title">${this._t("external_actions_title")}</div>
+              <button class="custom-actions-close-icon" data-custom-dialog-action="close" aria-label="${this._t("close")}">
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+            </div>
+            <div class="custom-actions-dialog-subtitle">${this._t("external_actions_subtitle")}</div>
+            <div class="custom-actions-grid">
+              ${
+                customEntities.length
+                  ? customEntities
+                      .map((entityId) => {
+                        const label = escapeHtml(this._customEntityLabel(entityId));
+                        const icon = this._customEntityIcon(entityId);
+                        const status = this._customEntityStatus(entityId);
+                        const escapedEntityId = escapeHtml(entityId);
+                        return `
+                          <button class="custom-entity-btn tone-${status.tone} ${status.active ? "is-active" : ""}" data-custom-entity="${escapedEntityId}" title="${label}">
+                            <ha-icon icon="${icon}"></ha-icon>
+                            <span class="custom-entity-name">${label}</span>
+                            <span class="custom-entity-state">${escapeHtml(status.label)}</span>
+                          </button>
+                        `;
+                      })
+                      .join("")
+                  : `<div class="custom-actions-empty">${this._t("external_actions_empty")}</div>`
+              }
+            </div>
+          </div>
+        </div>
+      `
+      : "";
 
     this.shadowRoot.innerHTML = `
       <ha-card>
@@ -1903,6 +2310,7 @@ class Byd3DCard extends HTMLElement {
             <div class="hero-overlay">
               ${heroBatteryOverlay}
               ${serviceOverlay}
+              ${heroCustomBadge}
               ${heroLockBadge}
             </div>
           </div>
@@ -1910,6 +2318,7 @@ class Byd3DCard extends HTMLElement {
           ${alertRibbon}
           ${confirmationOverlay}
           ${locationMapOverlay}
+          ${customEntitiesOverlay}
 
           <div class="category-tabs" role="radiogroup" aria-label="${this._t("aria_vehicle_categories")}">
             ${visibleTabs
@@ -2080,6 +2489,35 @@ class Byd3DCard extends HTMLElement {
           transform: none;
           color: #fff;
         }
+        .hero-custom-badge {
+          position: absolute;
+          left: 12px;
+          bottom: 12px;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(126,198,241,.48);
+          background: rgba(5,9,14,.88);
+          box-shadow: 0 0 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.1);
+        }
+        .hero-custom-badge.actionable {
+          cursor: pointer;
+        }
+        .hero-custom-badge.actionable:active {
+          transform: scale(.96);
+        }
+        .hero-custom-badge ha-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          --mdc-icon-size: 20px;
+          color: #d9ecff;
+        }
         .hero-service-item ha-icon {
           width: 20px;
           height: 20px;
@@ -2237,6 +2675,161 @@ class Byd3DCard extends HTMLElement {
         }
         .map-dialog-link:hover {
           text-decoration: underline;
+        }
+        .custom-actions-backdrop {
+          z-index: 31;
+        }
+        .custom-actions-dialog-card {
+          width: min(100%, 760px);
+          border-radius: 24px;
+          padding: 14px;
+          background: linear-gradient(180deg, rgba(8, 13, 22, .98), rgba(5, 9, 15, .99));
+          border: 1px solid rgba(255,255,255,.14);
+          box-shadow: 0 24px 80px rgba(0,0,0,.45);
+          display: grid;
+          gap: 10px;
+        }
+        .custom-actions-dialog-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .custom-actions-dialog-title {
+          font-size: 18px;
+          font-weight: 900;
+          color: #f4faff;
+        }
+        .custom-actions-dialog-subtitle {
+          font-size: 13px;
+          color: rgba(220,236,252,.86);
+        }
+        .custom-actions-close-icon {
+          appearance: none;
+          border: 1px solid rgba(255,255,255,.2);
+          background: rgba(255,255,255,.08);
+          color: #f0f8ff;
+          border-radius: 12px;
+          width: 38px;
+          height: 38px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform .15s ease, filter .15s ease;
+        }
+        .custom-actions-close-icon:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.06);
+        }
+        .custom-actions-close-icon ha-icon {
+          width: 20px;
+          height: 20px;
+        }
+        .custom-actions-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .custom-entity-btn {
+          appearance: none;
+          border: 1px solid rgba(255,255,255,.12);
+          background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.03));
+          color: #fff;
+          border-radius: 14px;
+          font-size: 14px;
+          font-weight: 800;
+          min-height: 64px;
+          padding: 10px 8px;
+          display: grid;
+          grid-template-columns: 20px minmax(0, 1fr);
+          grid-template-rows: auto auto;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+          text-align: left;
+          transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+        .custom-entity-btn:hover {
+          border-color: rgba(126,198,241,.62);
+          box-shadow: 0 0 14px rgba(76,179,236,.18), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .custom-entity-btn:active {
+          transform: translateY(1px);
+        }
+        .custom-entity-btn ha-icon {
+          width: 18px;
+          height: 18px;
+          color: #c9e7ff;
+          grid-row: 1 / span 2;
+          transition: color .18s ease, filter .18s ease;
+        }
+        .custom-entity-btn.is-active ha-icon {
+          color: #8ff0be;
+          filter: drop-shadow(0 0 8px rgba(120, 236, 170, .42));
+        }
+        .custom-entity-btn.tone-warn.is-active ha-icon {
+          color: #ffc48f;
+          filter: drop-shadow(0 0 8px rgba(255, 174, 103, .38));
+        }
+        .custom-entity-btn.tone-unavailable ha-icon {
+          color: #ffb4b4;
+          filter: saturate(.8);
+        }
+        .custom-entity-name {
+          min-width: 0;
+          white-space: normal;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          line-height: 1.22;
+        }
+        .custom-entity-state {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 11px;
+          font-weight: 700;
+          color: rgba(206,226,245,.88);
+        }
+        .custom-entity-btn.tone-active {
+          border-color: rgba(122, 232, 162, .62);
+          box-shadow: 0 0 12px rgba(122,232,162,.2), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .custom-entity-btn.tone-active .custom-entity-state {
+          color: #93efbf;
+        }
+        .custom-entity-btn.tone-inactive .custom-entity-state {
+          color: rgba(206,226,245,.75);
+        }
+        .custom-entity-btn.tone-warn {
+          border-color: rgba(255, 170, 110, .62);
+          box-shadow: 0 0 12px rgba(255,170,110,.2), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+        .custom-entity-btn.tone-warn .custom-entity-state {
+          color: #ffd2a8;
+        }
+        .custom-entity-btn.tone-unavailable {
+          border-color: rgba(255, 109, 109, .46);
+          filter: saturate(.84);
+        }
+        .custom-entity-btn.tone-unavailable .custom-entity-state {
+          color: #ffb2b2;
+        }
+        .custom-entity-btn.tone-info .custom-entity-state {
+          color: #9bd6ff;
+        }
+        .custom-actions-empty {
+          grid-column: 1 / -1;
+          border-radius: 12px;
+          border: 1px dashed rgba(255,255,255,.22);
+          background: rgba(255,255,255,.04);
+          color: rgba(225,240,255,.88);
+          padding: 14px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 700;
         }
         .hero-service-item.tone-cold {
           border-color: rgba(93,201,255,.52);
@@ -3019,6 +3612,17 @@ class Byd3DCard extends HTMLElement {
             width: 17px;
             height: 17px;
           }
+          .hero-custom-badge,
+          .hero-lock-badge {
+            width: 36px;
+            height: 36px;
+          }
+          .hero-custom-badge ha-icon,
+          .hero-lock-badge ha-icon {
+            --mdc-icon-size: 18px;
+            width: 18px;
+            height: 18px;
+          }
           .alert-ribbon-inner { padding: 5px 8px; gap: 6px; grid-template-columns: auto minmax(0, 1fr); }
           .alert-single { font-size: 12px; }
           .alert-marquee-line { font-size: 12px; }
@@ -3034,6 +3638,9 @@ class Byd3DCard extends HTMLElement {
           .metric strong { font-size: 18px; }
           .action-btn { font-size: 14px; }
           .action-btn ha-icon { width: 17px; height: 17px; }
+          .custom-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+          .custom-entity-btn { min-height: 50px; font-size: 13px; }
+          .custom-actions-dialog-subtitle { font-size: 12px; }
           .seat-level { min-height: 30px; font-size: 13px; }
           .climate-btn { min-height: 30px; font-size: 13px; }
           .target-box { min-height: 30px; }
@@ -3173,6 +3780,13 @@ class Byd3DCard extends HTMLElement {
       });
     });
 
+    this.shadowRoot.querySelectorAll("[data-hero-custom-actions]").forEach((badge) => {
+      badge.addEventListener("click", () => {
+        this._flashButtonFeedback(badge);
+        this._showCustomEntitiesDialog();
+      });
+    });
+
     this.shadowRoot.querySelectorAll("[data-dialog-backdrop]").forEach((backdrop) => {
       backdrop.addEventListener("click", (event) => {
         if (event.target === backdrop) this._hideConfirmation();
@@ -3182,6 +3796,12 @@ class Byd3DCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-map-dialog-backdrop]").forEach((backdrop) => {
       backdrop.addEventListener("click", (event) => {
         if (event.target === backdrop) this._hideLocationMapDialog();
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-custom-dialog-backdrop]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) this._hideCustomEntitiesDialog();
       });
     });
 
@@ -3210,6 +3830,27 @@ class Byd3DCard extends HTMLElement {
       });
     });
 
+    this.shadowRoot.querySelectorAll("[data-custom-dialog-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-custom-dialog-action");
+        if (action === "close") {
+          this._hideCustomEntitiesDialog();
+        }
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-custom-entity]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._flashButtonFeedback(btn);
+        const entityId = btn.getAttribute("data-custom-entity");
+        if (!entityId) return;
+        this._callCustomEntity(entityId);
+        if (this._buttonFeedbacks) {
+          this._buttonFeedbacks.set(`custom:${entityId}`, { text: this._t("executed"), until: Date.now() + 1500 });
+        }
+      });
+    });
+
     const heroImage = this.shadowRoot.querySelector(".car-image");
     if (heroImage) {
       heroImage.addEventListener("error", () => {
@@ -3230,18 +3871,32 @@ class Byd3DCardEditor extends HTMLElement {
       Boolean(config?.show_seat_cooling)
     );
     this._config.show_seat_cooling = this._config.seat_passenger_mode === "cool";
+    this._config.show_external_entities = normalizeExternalEntitiesEnabled(this._config.show_external_entities);
     this._config.category_order = this._normalizeCategoryOrder(this._config.category_order);
     this._config.tire_pressure_unit = normalizeTirePressureUnit(this._config.tire_pressure_unit);
     this._config.image_base_path = normalizeImageBasePath(this._config.image_base_path);
     this._config.i18n_base_path = normalizeI18nBasePath(this._config.i18n_base_path);
+    this._config.custom_entities = normalizeCustomEntities(this._config.custom_entities);
+    this._config.custom_entity_names = pruneCustomEntityNames(
+      this._config.custom_entity_names,
+      this._config.custom_entities
+    );
+    this._config.custom_entity_icons = pruneCustomEntityIcons(
+      this._config.custom_entity_icons,
+      this._config.custom_entities
+    );
     this._config.refresh_interval_seconds = this._normalizeRefreshInterval(this._config.refresh_interval_seconds);
     this._config.title_font_size = this._normalizeTitleFontSize(this._config.title_font_size);
     this._render();
   }
 
   set hass(hass) {
+    const hadHass = Boolean(this._hass);
     this._hass = hass;
-    if (this.isConnected) this._populatePrefixCandidates();
+    if (this.isConnected) {
+      this._populatePrefixCandidates();
+      if (!hadHass) this._render();
+    }
   }
 
   connectedCallback() {
@@ -3444,8 +4099,295 @@ class Byd3DCardEditor extends HTMLElement {
       .join("");
   }
 
+  _allEntityIds() {
+    if (!this._hass?.states) return [];
+    return Object.keys(this._hass.states).sort((a, b) => {
+      const aName = this._hass.states[a]?.attributes?.friendly_name || a;
+      const bName = this._hass.states[b]?.attributes?.friendly_name || b;
+      return String(aName).localeCompare(String(bName));
+    });
+  }
+
+  _renderExternalEntitiesOptions() {
+    const selected = new Set(normalizeCustomEntities(this._config?.custom_entities));
+    return this._allEntityIds()
+      .map((entityId) => {
+        const st = this._hass.states[entityId];
+        const name = st?.attributes?.friendly_name || entityId;
+        const selectedAttr = selected.has(entityId) ? "selected" : "";
+        return `<option value="${escapeHtml(entityId)}" ${selectedAttr}>${escapeHtml(name)} (${escapeHtml(entityId)})</option>`;
+      })
+      .join("");
+  }
+
+  _selectedExternalEntitiesFromEditor() {
+    return normalizeCustomEntities(this._config?.custom_entities);
+  }
+
+  _customEntityIconsFromEditor() {
+    const selected = new Set(this._selectedCustomEntities());
+    const inputs = [...(this.shadowRoot?.querySelectorAll("[data-custom-icon-input]") || [])];
+    if (!inputs.length) {
+      return pruneCustomEntityIcons(this._config?.custom_entity_icons, this._config?.custom_entities);
+    }
+    const out = {};
+    inputs.forEach((input) => {
+      const entityId = String(input.getAttribute("data-custom-icon-input") || "").trim();
+      if (!entityId || !selected.has(entityId)) return;
+      const icon = this._normalizeIconInputValue(input.value);
+      if (!icon) return;
+      out[entityId] = icon;
+    });
+    return out;
+  }
+
+  _customEntityNamesFromEditor() {
+    const selected = new Set(this._selectedCustomEntities());
+    const inputs = [...(this.shadowRoot?.querySelectorAll("[data-custom-name-input]") || [])];
+    if (!inputs.length) {
+      return pruneCustomEntityNames(this._config?.custom_entity_names, this._config?.custom_entities);
+    }
+    const out = {};
+    inputs.forEach((input) => {
+      const entityId = String(input.getAttribute("data-custom-name-input") || "").trim();
+      if (!entityId || !selected.has(entityId)) return;
+      const name = String(input.value || "").trim();
+      if (!name) return;
+      out[entityId] = name;
+    });
+    return out;
+  }
+
+  _normalizeIconInputValue(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("mdi:")) return raw;
+    if (raw.startsWith("mdi-")) return `mdi:${raw.slice(4)}`;
+    return `mdi:${raw}`;
+  }
+
+  _renderIconSuggestions() {
+    const dynamic = this._allEntityIds()
+      .map((entityId) => String(this._hass?.states?.[entityId]?.attributes?.icon || "").trim())
+      .filter((icon) => icon.startsWith("mdi:"));
+    const custom = Object.values(normalizeCustomEntityIcons(this._config?.custom_entity_icons));
+    const merged = [...new Set([...MDI_ICON_SUGGESTIONS, ...dynamic, ...custom])];
+    return merged.map((icon) => `<option value="${escapeHtml(icon)}"></option>`).join("");
+  }
+
+  _selectedCustomEntities() {
+    return normalizeCustomEntities(this._config?.custom_entities);
+  }
+
+  _editorEntityIcon(entityId) {
+    const customIcon = String(this._config?.custom_entity_icons?.[entityId] || "").trim();
+    if (customIcon) return this._normalizeIconInputValue(customIcon);
+    const stateObj = this._hass?.states?.[entityId];
+    const icon = String(stateObj?.attributes?.icon || "").trim();
+    if (icon) return icon;
+    const domain = String(entityId || "").split(".")[0] || "";
+    const map = {
+      script: "mdi:script-text-outline",
+      scene: "mdi:palette-outline",
+      light: "mdi:lightbulb",
+      switch: "mdi:toggle-switch-outline",
+      button: "mdi:gesture-tap-button",
+      cover: "mdi:garage-variant",
+      lock: "mdi:lock",
+      fan: "mdi:fan",
+      climate: "mdi:air-conditioner",
+      media_player: "mdi:cast",
+      input_boolean: "mdi:toggle-switch",
+      automation: "mdi:robot",
+    };
+    return map[domain] || "mdi:flash";
+  }
+
+  _renderExternalEntitiesSearchResults() {
+    const selected = new Set(this._selectedCustomEntities());
+    const search = String(this._customEntitiesSearch || "").trim().toLowerCase();
+
+    const results = this._allEntityIds().filter((entityId) => {
+      if (selected.has(entityId)) return false;
+      const name = String(this._hass.states[entityId]?.attributes?.friendly_name || entityId);
+      return (
+        !search ||
+        name.toLowerCase().includes(search) ||
+        entityId.toLowerCase().includes(search)
+      );
+    });
+
+    if (!results.length) {
+      return `<li class="entity-empty">${this._t("external_actions_empty")}</li>`;
+    }
+
+    return results.slice(0, 40).map((entityId) => {
+      const st = this._hass.states[entityId];
+      const name = st?.attributes?.friendly_name || entityId;
+      const icon = this._editorEntityIcon(entityId);
+      return `
+        <li class="entity-item compact" data-entity-id="${escapeHtml(entityId)}">
+          <div class="entity-left">
+            <ha-icon class="entity-item-icon" icon="${escapeHtml(icon)}"></ha-icon>
+            <div class="entity-details">
+              <span class="entity-name">${escapeHtml(name)}</span>
+              <span class="entity-id">${escapeHtml(entityId)}</span>
+            </div>
+          </div>
+          <button type="button" class="entity-add-btn compact" data-add-custom-entity="${escapeHtml(entityId)}">+</button>
+        </li>
+      `;
+    }).join("");
+  }
+
+  _renderExternalEntitiesSelected() {
+    const selected = this._selectedCustomEntities();
+    if (!selected.length) {
+      return `<li class="entity-empty">${this._t("external_actions_empty")}</li>`;
+    }
+
+    return selected.map((entityId) => {
+      const st = this._hass.states[entityId];
+      const name = st?.attributes?.friendly_name || entityId;
+      const customName = String(this._config?.custom_entity_names?.[entityId] || "").trim();
+      const icon = this._editorEntityIcon(entityId);
+      const label = customName || name;
+      return `
+        <li class="entity-item selected compact" data-selected-entity="${escapeHtml(entityId)}">
+          <div class="entity-left">
+            <ha-icon class="entity-item-icon" icon="${escapeHtml(icon)}"></ha-icon>
+            <div class="entity-details">
+              <span class="entity-name">${escapeHtml(label)}</span>
+              <span class="entity-id">${escapeHtml(entityId)}</span>
+            </div>
+          </div>
+          <button type="button" class="entity-remove-btn compact" data-remove-custom-entity="${escapeHtml(entityId)}">&times;</button>
+        </li>
+      `;
+    }).join("");
+  }
+
+  _setCustomEntities(entities) {
+    this._config.custom_entities = normalizeCustomEntities(entities);
+    this._config.custom_entity_names = pruneCustomEntityNames(
+      this._config.custom_entity_names,
+      this._config.custom_entities
+    );
+    this._config.custom_entity_icons = pruneCustomEntityIcons(
+      this._config.custom_entity_icons,
+      this._config.custom_entities
+    );
+    this._emitChange({
+      custom_entities: this._config.custom_entities,
+      custom_entity_names: this._config.custom_entity_names,
+      custom_entity_icons: this._config.custom_entity_icons,
+    });
+  }
+
+  _addCustomEntity(entityId) {
+    const entities = this._selectedCustomEntities();
+    if (!entityId || entities.includes(entityId)) return;
+    entities.push(entityId);
+    this._setCustomEntities(entities);
+    this._render();
+  }
+
+  _removeCustomEntity(entityId) {
+    const entities = this._selectedCustomEntities().filter((id) => id !== entityId);
+    this._setCustomEntities(entities);
+    this._render();
+  }
+
+  _refreshExternalEntitiesResultsInPlace() {
+    if (!this.shadowRoot) return;
+    const list = this.shadowRoot.querySelector(".entity-results");
+    if (!list) return;
+    const prevScroll = list.scrollTop;
+    list.innerHTML = this._renderExternalEntitiesSearchResults();
+    list.scrollTop = prevScroll;
+    this.shadowRoot.querySelectorAll("[data-add-custom-entity]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const entityId = btn.getAttribute("data-add-custom-entity");
+        if (!entityId) return;
+        this._addCustomEntity(entityId);
+      });
+    });
+  }
+
+  _setCustomEntityIcon(entityId, iconValue) {
+    const entity = String(entityId || "").trim();
+    if (!entity) return;
+    const current = normalizeCustomEntityIcons(this._config.custom_entity_icons);
+    const icon = this._normalizeIconInputValue(iconValue);
+    if (icon) current[entity] = icon;
+    else delete current[entity];
+    const next = pruneCustomEntityIcons(current, this._config.custom_entities);
+    this._config.custom_entity_icons = next;
+    this._emitChange({ custom_entity_icons: next });
+  }
+
+  _setCustomEntityName(entityId, nameValue) {
+    const entity = String(entityId || "").trim();
+    if (!entity) return;
+    const current = normalizeCustomEntityNames(this._config.custom_entity_names);
+    const name = String(nameValue || "").trim();
+    if (name) current[entity] = name;
+    else delete current[entity];
+    const next = pruneCustomEntityNames(current, this._config.custom_entities);
+    this._config.custom_entity_names = next;
+    this._emitChange({ custom_entity_names: next });
+  }
+
+  _renderExternalEntityIconRows() {
+    const selected = this._selectedCustomEntities();
+    if (!selected.length) return "";
+    return selected
+      .map((entityId) => {
+        const stateObj = this._hass?.states?.[entityId];
+        const defaultLabel = stateObj?.attributes?.friendly_name || entityId;
+        const customName = String(this._config?.custom_entity_names?.[entityId] || "").trim();
+        const customIcon = String(this._config?.custom_entity_icons?.[entityId] || "").trim();
+        const previewIcon = this._normalizeIconInputValue(customIcon) || this._customEntityIcon(entityId);
+        return `
+          <div class="entity-icon-row">
+            <span class="entity-icon-label">${escapeHtml(defaultLabel)}</span>
+            <div class="entity-icon-inputs">
+              <label class="entity-inline-label">${this._t("settings_external_name_label")}</label>
+              <input
+                type="text"
+                data-custom-name-input="${escapeHtml(entityId)}"
+                value="${escapeHtml(customName)}"
+                placeholder="${this._t("settings_external_name_placeholder")}"
+              />
+              <label class="entity-inline-label">${this._t("settings_external_icon_label")}</label>
+              <div class="entity-icon-edit-row">
+                <ha-icon icon="${escapeHtml(previewIcon)}" data-custom-icon-preview="${escapeHtml(entityId)}"></ha-icon>
+                <input
+                  type="text"
+                  list="mdi_icon_suggestions"
+                  data-custom-icon-input="${escapeHtml(entityId)}"
+                  value="${escapeHtml(customIcon)}"
+                  placeholder="${this._t("settings_external_icon_placeholder")}"
+                />
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
   _emitChange(partial) {
     this._config = { ...this._config, ...partial };
+    this._config.custom_entities = normalizeCustomEntities(this._config.custom_entities);
+    this._config.custom_entity_names = pruneCustomEntityNames(
+      this._config.custom_entity_names,
+      this._config.custom_entities
+    );
+    this._config.custom_entity_icons = pruneCustomEntityIcons(
+      this._config.custom_entity_icons,
+      this._config.custom_entities
+    );
     fireConfigChanged(this, this._config);
   }
 
@@ -3472,6 +4414,9 @@ class Byd3DCardEditor extends HTMLElement {
     if (!this._config) {
       this._config = { ...DEFAULT_CONFIG, entities: {} };
     }
+    if (typeof this._externalSectionExpanded !== "boolean") this._externalSectionExpanded = false;
+    const externalEnabled = normalizeExternalEntitiesEnabled(this._config.show_external_entities);
+    const selectedExternalCount = this._selectedCustomEntities().length;
 
     this.shadowRoot.innerHTML = `
       <div class="editor-shell">
@@ -3549,6 +4494,62 @@ class Byd3DCardEditor extends HTMLElement {
                 <option value="kpa" ${normalizeTirePressureUnit(this._config.tire_pressure_unit) === "kpa" ? "selected" : ""}>${this._t("tire_unit_kpa")}</option>
               </select>
             </div>
+          </section>
+
+          <section class="group">
+            <div class="group-title">${this._t("settings_external_actions")}</div>
+            <div class="external-top-row">
+              <label class="toggle-chip compact"><input id="show_external_entities" type="checkbox" ${externalEnabled ? "checked" : ""}/> <span>${this._t("settings_show_external_entities")}</span></label>
+              <button type="button" class="external-collapse-btn" data-external-toggle>
+                ${this._externalSectionExpanded ? this._t("settings_external_config_close") : this._t("settings_external_config_open")}
+              </button>
+            </div>
+            <div class="external-summary">${this._t("settings_external_selected_count")}: ${selectedExternalCount}</div>
+            ${
+              this._externalSectionExpanded
+                ? `
+              <div class="field">
+                <label>${this._t("settings_external_entities")}</label>
+                ${
+                  externalEnabled
+                    ? ""
+                    : `<small>${this._t("settings_show_external_entities")} (${this._t("state_off")})</small>`
+                }
+                <input
+                  id="custom_entities_search"
+                  type="search"
+                  value="${escapeHtml(this._customEntitiesSearch || "")}" 
+                  placeholder="${this._t("settings_external_entities_search_placeholder")}" 
+                />
+                <small>${this._t("settings_external_entities_hint")}</small>
+                <div class="external-entities-body compact">
+                  <div class="external-entities-pane">
+                    <div class="external-entities-pane-title">${this._t("settings_external_entities_available")}</div>
+                    <ul class="entity-results">
+                      ${this._renderExternalEntitiesSearchResults()}
+                    </ul>
+                  </div>
+                  <div class="external-entities-pane">
+                    <div class="external-entities-pane-title">${this._t("settings_external_entities_selected")}</div>
+                    <ul class="entity-selected">
+                      ${this._renderExternalEntitiesSelected()}
+                    </ul>
+                  </div>
+                </div>
+                <div class="entity-icons-config compact">
+                  <div class="entity-icons-title">${this._t("settings_external_icons")}</div>
+                  <small>${this._t("settings_external_icons_hint")}</small>
+                  <div class="entity-icons-grid">
+                    ${this._renderExternalEntityIconRows()}
+                  </div>
+                </div>
+                <datalist id="mdi_icon_suggestions">
+                  ${this._renderIconSuggestions()}
+                </datalist>
+              </div>
+            `
+                : ""
+            }
           </section>
 
           <section class="group">
@@ -3645,6 +4646,7 @@ class Byd3DCardEditor extends HTMLElement {
         }
         input[type="text"],
         input[type="number"],
+        input[type="search"],
         select {
           border: 1px solid rgba(157,190,220,.18);
           background: linear-gradient(180deg, rgba(17,23,33,.72), rgba(13,18,27,.82));
@@ -3657,10 +4659,236 @@ class Byd3DCardEditor extends HTMLElement {
         }
         input[type="text"]:focus,
         input[type="number"]:focus,
+        input[type="search"]:focus,
         select:focus {
           outline: none;
           border-color: rgba(0,184,255,.75);
           box-shadow: 0 0 0 2px rgba(0,184,255,.22), 0 10px 24px rgba(0,184,255,.12);
+        }
+        .external-top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .external-summary {
+          font-size: 12px;
+          color: rgba(207,225,242,.8);
+          font-weight: 700;
+        }
+        .external-collapse-btn {
+          border: 1px solid rgba(120, 196, 255, .35);
+          background: linear-gradient(180deg, rgba(0,184,255,.2), rgba(0,184,255,.07));
+          color: #dff2ff;
+          border-radius: 11px;
+          padding: 8px 10px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: transform .15s ease, filter .15s ease, box-shadow .2s ease;
+        }
+        .external-collapse-btn:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.05);
+          box-shadow: 0 8px 16px rgba(0, 184, 255, .18);
+        }
+        .toggle-chip.compact {
+          padding: 8px 10px;
+          min-height: 38px;
+        }
+        .toggle-chip.compact span {
+          font-size: 12px;
+        }
+        .external-entities-body {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 10px;
+        }
+        .external-entities-body.compact {
+          gap: 8px;
+        }
+        .external-entities-pane {
+          display: grid;
+          gap: 8px;
+          min-height: 100px;
+        }
+        .external-entities-pane-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: rgba(207,225,242,.8);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .entity-results,
+        .entity-selected {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 8px;
+          max-height: 210px;
+          overflow: auto;
+        }
+        .entity-item {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 10px;
+          align-items: center;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(157,190,220,.18);
+          background: linear-gradient(180deg, rgba(20,29,40,.86), rgba(15,21,30,.9));
+        }
+        .entity-item.compact {
+          padding: 8px 9px;
+          gap: 8px;
+        }
+        .entity-item.selected {
+          border-color: rgba(139,226,121,.35);
+        }
+        .entity-left {
+          display: grid;
+          grid-template-columns: 20px minmax(0, 1fr);
+          gap: 8px;
+          align-items: start;
+          min-width: 0;
+        }
+        .entity-item-icon {
+          width: 18px;
+          height: 18px;
+          --mdc-icon-size: 18px;
+          color: #bde2ff;
+          margin-top: 1px;
+        }
+        .entity-details {
+          display: grid;
+          gap: 3px;
+          min-width: 0;
+        }
+        .entity-name {
+          font-size: 12px;
+          font-weight: 700;
+          color: #f3fbff;
+          line-height: 1.2;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .entity-id {
+          font-size: 11px;
+          color: rgba(207,225,242,.68);
+          word-break: break-all;
+          line-height: 1.15;
+        }
+        .entity-add-btn,
+        .entity-remove-btn {
+          min-width: 80px;
+          border: none;
+          border-radius: 10px;
+          background: rgba(0,184,255,.16);
+          color: #d7f1ff;
+          padding: 8px 10px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+          transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+        }
+        .entity-add-btn.compact,
+        .entity-remove-btn.compact {
+          min-width: 30px;
+          width: 30px;
+          height: 30px;
+          padding: 0;
+          border-radius: 8px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 17px;
+          line-height: 1;
+        }
+        .entity-remove-btn {
+          background: rgba(255,90,90,.18);
+        }
+        .entity-add-btn:hover,
+        .entity-remove-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 3px 12px rgba(0,0,0,.2);
+        }
+        .entity-empty {
+          padding: 12px 14px;
+          border-radius: 12px;
+          background: rgba(255,255,255,.04);
+          color: rgba(225,240,255,.82);
+          font-size: 13px;
+          text-align: center;
+        }
+        .entity-icons-config {
+          margin-top: 10px;
+          display: grid;
+          gap: 8px;
+        }
+        .entity-icons-config.compact {
+          margin-top: 6px;
+          gap: 6px;
+        }
+        .entity-icons-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: rgba(207,225,242,.8);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .entity-icons-grid {
+          display: grid;
+          gap: 8px;
+        }
+        .entity-icon-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+          gap: 8px;
+          align-items: start;
+          padding: 8px 10px;
+          border-radius: 12px;
+          border: 1px solid rgba(157,190,220,.18);
+          background: linear-gradient(180deg, rgba(20,29,40,.86), rgba(15,21,30,.9));
+        }
+        .entity-icon-label {
+          font-size: 12px;
+          font-weight: 700;
+          color: #f3fbff;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .entity-icon-row input[type="text"] {
+          min-height: 40px;
+          font-size: 13px;
+          padding: 0 10px;
+        }
+        .entity-icon-inputs {
+          display: grid;
+          gap: 6px;
+        }
+        .entity-inline-label {
+          font-size: 11px;
+          font-weight: 700;
+          color: rgba(207,225,242,.8);
+          margin: 0;
+        }
+        .entity-icon-edit-row {
+          display: grid;
+          grid-template-columns: 34px minmax(0, 1fr);
+          align-items: center;
+          gap: 7px;
+        }
+        .entity-icon-edit-row ha-icon {
+          width: 22px;
+          height: 22px;
+          --mdc-icon-size: 22px;
+          color: #bde2ff;
+          justify-self: center;
         }
         small {
           color: rgba(207,225,242,.7);
@@ -3926,6 +5154,15 @@ class Byd3DCardEditor extends HTMLElement {
             padding: 11px;
             gap: 10px;
           }
+          .external-entities-body {
+            grid-template-columns: 1fr;
+          }
+          .entity-icon-row {
+            grid-template-columns: 1fr;
+          }
+          .entity-icon-edit-row {
+            grid-template-columns: 30px minmax(0, 1fr);
+          }
           .profiles,
           .lang-grid {
             grid-template-columns: 1fr;
@@ -3950,6 +5187,9 @@ class Byd3DCardEditor extends HTMLElement {
         image_url: this.shadowRoot.getElementById("image_url").value.trim(),
         image_base_path: this.shadowRoot.getElementById("image_base_path").value.trim() || DEFAULT_IMAGE_BASE_PATH,
         i18n_base_path: this.shadowRoot.getElementById("i18n_base_path").value.trim() || DEFAULT_I18N_BASE_PATH,
+        custom_entities: this._selectedExternalEntitiesFromEditor(),
+        custom_entity_names: this._customEntityNamesFromEditor(),
+        custom_entity_icons: this._customEntityIconsFromEditor(),
         tire_pressure_unit: normalizeTirePressureUnit(this.shadowRoot.getElementById("tire_pressure_unit").value),
         show_climate: this.shadowRoot.getElementById("show_climate").checked,
         show_seat_cooling:
@@ -3959,6 +5199,9 @@ class Byd3DCardEditor extends HTMLElement {
         show_tires: this.shadowRoot.getElementById("show_tires").checked,
         show_actions: this.shadowRoot.getElementById("show_actions").checked,
         show_location: this.shadowRoot.getElementById("show_location").checked,
+        show_external_entities: normalizeExternalEntitiesEnabled(
+          this.shadowRoot.getElementById("show_external_entities")?.checked
+        ),
       });
 
     this.shadowRoot.getElementById("title").addEventListener("change", onChange);
@@ -3969,11 +5212,73 @@ class Byd3DCardEditor extends HTMLElement {
     this.shadowRoot.getElementById("i18n_base_path").addEventListener("change", onChange);
     this.shadowRoot.getElementById("refresh_interval_seconds").addEventListener("change", onChange);
     this.shadowRoot.getElementById("tire_pressure_unit").addEventListener("change", onChange);
+
+    this.shadowRoot.querySelectorAll("[data-external-toggle]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._externalSectionExpanded = !this._externalSectionExpanded;
+        this._render();
+      });
+    });
+
+    const entitiesSearch = this.shadowRoot.getElementById("custom_entities_search");
+    if (entitiesSearch) {
+      entitiesSearch.addEventListener("input", () => {
+        this._customEntitiesSearch = entitiesSearch.value;
+        this._refreshExternalEntitiesResultsInPlace();
+      });
+    }
+
+    this.shadowRoot.getElementById("show_external_entities")?.addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_climate").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_vehicle").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_tires").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_actions").addEventListener("change", onChange);
     this.shadowRoot.getElementById("show_location").addEventListener("change", onChange);
+
+    this.shadowRoot.querySelectorAll("[data-add-custom-entity]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const entityId = btn.getAttribute("data-add-custom-entity");
+        if (!entityId) return;
+        this._addCustomEntity(entityId);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-remove-custom-entity]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const entityId = btn.getAttribute("data-remove-custom-entity");
+        if (!entityId) return;
+        this._removeCustomEntity(entityId);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-custom-icon-input]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const entityId = input.getAttribute("data-custom-icon-input");
+        if (!entityId) return;
+        const preview = [...this.shadowRoot.querySelectorAll("[data-custom-icon-preview]")].find(
+          (node) => node.getAttribute("data-custom-icon-preview") === entityId
+        );
+        if (preview) {
+          const icon = this._normalizeIconInputValue(input.value) || this._customEntityIcon(entityId);
+          preview.setAttribute("icon", icon);
+        }
+      });
+      input.addEventListener("change", () => {
+        const entityId = input.getAttribute("data-custom-icon-input");
+        if (!entityId) return;
+        this._setCustomEntityIcon(entityId, input.value);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-custom-name-input]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const entityId = input.getAttribute("data-custom-name-input");
+        if (!entityId) return;
+        this._setCustomEntityName(entityId, input.value);
+      });
+    });
 
     this.shadowRoot.querySelectorAll(".profile").forEach((button) => {
       button.addEventListener("click", () => {
