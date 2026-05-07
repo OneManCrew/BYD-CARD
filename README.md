@@ -30,6 +30,7 @@ Recommended order:
 - Last selected category is remembered after refresh
 - Languages: Hebrew, English, Russian, French
 - Local profile images from `pic/`
+- External actions: choose multiple entities from Home Assistant and trigger them from a hero popup
 
 ## Install
 
@@ -67,7 +68,7 @@ Check these quickly:
    - Manual install: `/config/www/byd-card/byd-3d-card.js`
    - HACS install: `/config/www/community/<repository-name>/byd-3d-card-hacs.js`
 4. If browser/app cache is stale, add a version query:
-   - `/hacsfiles/<repository-name>/byd-3d-card-hacs.js?v=1.0.7`
+   - `/hacsfiles/<repository-name>/byd-3d-card-hacs.js?v=1.0.11`
 5. Then hard refresh the browser/app again.
 
 ## Basic YAML
@@ -94,6 +95,9 @@ category_order:
   - tires
   - location
   - actions
+custom_entities:
+  - script.open_parking_gate
+  - light.garden
 entities: {}
 
 ```
@@ -101,6 +105,12 @@ entities: {}
 `tire_pressure_unit` options:
 - `psi`
 - `kpa`
+
+`custom_entities`:
+- Any entity IDs from any domain.
+- A script icon appears on the hero image (left-bottom, aligned with lock badge).
+- Tap it to open a 3-column popup grid with buttons for selected entities.
+- In card editor, each selected entity can get a custom icon (for example `mdi:gate-open`).
 
 ## Files
 

@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.10";
+const CARD_VERSION = "1.0.11";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -294,6 +294,10 @@ const MDI_ICON_SUGGESTIONS = [
   "mdi:leaf",
   "mdi:flower",
   "mdi:tree",
+];
+const MDI_ICON_META_URLS = [
+  "https://cdn.jsdelivr.net/npm/@mdi/svg@latest/meta.json",
+  "https://raw.githubusercontent.com/Templarian/MaterialDesign-SVG/master/meta.json",
 ];
 
 const TRANSLATION_CACHE = new Map();
@@ -3893,6 +3897,7 @@ class Byd3DCardEditor extends HTMLElement {
   set hass(hass) {
     const hadHass = Boolean(this._hass);
     this._hass = hass;
+    this._ensureMdiIconCatalogLoaded();
     if (this.isConnected) {
       this._populatePrefixCandidates();
       if (!hadHass) this._render();
@@ -3903,6 +3908,7 @@ class Byd3DCardEditor extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._render();
     this._populatePrefixCandidates();
+    this._ensureMdiIconCatalogLoaded();
   }
 
   _language() {
@@ -4166,13 +4172,86 @@ class Byd3DCardEditor extends HTMLElement {
     return `mdi:${raw}`;
   }
 
-  _renderIconSuggestions() {
+  async _ensureMdiIconCatalogLoaded() {
+    if (Array.isArray(Byd3DCardEditor._mdiCatalog) && Byd3DCardEditor._mdiCatalog.length) {
+      return Byd3DCardEditor._mdiCatalog;
+    }
+    if (Byd3DCardEditor._mdiCatalogPromise) {
+      return Byd3DCardEditor._mdiCatalogPromise;
+    }
+
+    Byd3DCardEditor._mdiCatalogPromise = (async () => {
+      for (const url of MDI_ICON_META_URLS) {
+        try {
+          const response = await fetch(url, { cache: "force-cache" });
+          if (!response.ok) continue;
+          const payload = await response.json();
+          if (!Array.isArray(payload)) continue;
+          const icons = payload
+            .map((item) => String(item?.name || "").trim())
+            .filter(Boolean)
+            .map((name) => `mdi:${name}`);
+          if (!icons.length) continue;
+          Byd3DCardEditor._mdiCatalog = icons;
+          return icons;
+        } catch (_err) {
+          continue;
+        }
+      }
+      Byd3DCardEditor._mdiCatalog = [];
+      return [];
+    })();
+
+    const icons = await Byd3DCardEditor._mdiCatalogPromise;
+    Byd3DCardEditor._mdiCatalogPromise = null;
+    if (icons.length && this.isConnected) this._render();
+    return icons;
+  }
+
+  _iconSuggestionValues() {
     const dynamic = this._allEntityIds()
       .map((entityId) => String(this._hass?.states?.[entityId]?.attributes?.icon || "").trim())
       .filter((icon) => icon.startsWith("mdi:"));
     const custom = Object.values(normalizeCustomEntityIcons(this._config?.custom_entity_icons));
-    const merged = [...new Set([...MDI_ICON_SUGGESTIONS, ...dynamic, ...custom])];
-    return merged.map((icon) => `<option value="${escapeHtml(icon)}"></option>`).join("");
+    const fullCatalog = Array.isArray(Byd3DCardEditor._mdiCatalog) ? Byd3DCardEditor._mdiCatalog : [];
+    return [...new Set([...fullCatalog, ...MDI_ICON_SUGGESTIONS, ...dynamic, ...custom])];
+  }
+
+  _renderIconSuggestions() {
+    return this._iconSuggestionValues().map((icon) => `<option value="${escapeHtml(icon)}"></option>`).join("");
+  }
+
+  _renderIconDropdownOptions(entityId, query) {
+    const term = String(query || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^mdi:/, "")
+      .replace(/^mdi-/, "");
+    const options = this._iconSuggestionValues()
+      .filter((icon) => {
+        const lower = icon.toLowerCase();
+        const bare = lower.replace(/^mdi:/, "");
+        return !term || bare.startsWith(term) || lower.includes(term) || bare.includes(term);
+      })
+      .slice(0, 140);
+    if (!options.length) {
+      return `<div class="icon-dropdown-empty">${this._t("external_actions_empty")}</div>`;
+    }
+    return options
+      .map(
+        (icon) => `
+          <button
+            type="button"
+            class="icon-dropdown-option"
+            data-icon-select="${escapeHtml(entityId)}"
+            data-icon-value="${escapeHtml(icon)}"
+          >
+            <ha-icon icon="${escapeHtml(icon)}"></ha-icon>
+            <span>${escapeHtml(icon)}</span>
+          </button>
+        `
+      )
+      .join("");
   }
 
   _selectedCustomEntities() {
@@ -4347,28 +4426,37 @@ class Byd3DCardEditor extends HTMLElement {
         const defaultLabel = stateObj?.attributes?.friendly_name || entityId;
         const customName = String(this._config?.custom_entity_names?.[entityId] || "").trim();
         const customIcon = String(this._config?.custom_entity_icons?.[entityId] || "").trim();
-        const previewIcon = this._normalizeIconInputValue(customIcon) || this._customEntityIcon(entityId);
+        const previewIcon = this._normalizeIconInputValue(customIcon) || this._editorEntityIcon(entityId);
         return `
           <div class="entity-icon-row">
             <span class="entity-icon-label">${escapeHtml(defaultLabel)}</span>
-            <div class="entity-icon-inputs">
-              <label class="entity-inline-label">${this._t("settings_external_name_label")}</label>
+            <div class="entity-icon-inputs compact">
               <input
                 type="text"
+                class="entity-name-input-compact"
                 data-custom-name-input="${escapeHtml(entityId)}"
                 value="${escapeHtml(customName)}"
                 placeholder="${this._t("settings_external_name_placeholder")}"
               />
-              <label class="entity-inline-label">${this._t("settings_external_icon_label")}</label>
               <div class="entity-icon-edit-row">
                 <ha-icon icon="${escapeHtml(previewIcon)}" data-custom-icon-preview="${escapeHtml(entityId)}"></ha-icon>
-                <input
-                  type="text"
-                  list="mdi_icon_suggestions"
-                  data-custom-icon-input="${escapeHtml(entityId)}"
-                  value="${escapeHtml(customIcon)}"
-                  placeholder="${this._t("settings_external_icon_placeholder")}"
-                />
+                <div class="icon-combobox" data-icon-combobox="${escapeHtml(entityId)}">
+                  <div class="icon-combobox-input">
+                    <input
+                      type="text"
+                      data-custom-icon-input="${escapeHtml(entityId)}"
+                      value="${escapeHtml(customIcon)}"
+                      placeholder="${this._t("settings_external_icon_placeholder")}"
+                      autocomplete="off"
+                    />
+                    <button type="button" class="icon-dropdown-toggle" data-icon-dropdown-toggle="${escapeHtml(entityId)}">
+                      <ha-icon icon="mdi:chevron-down"></ha-icon>
+                    </button>
+                  </div>
+                  <div class="icon-dropdown" data-icon-dropdown="${escapeHtml(entityId)}">
+                    ${this._renderIconDropdownOptions(entityId, customIcon)}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -4500,9 +4588,11 @@ class Byd3DCardEditor extends HTMLElement {
             <div class="group-title">${this._t("settings_external_actions")}</div>
             <div class="external-top-row">
               <label class="toggle-chip compact"><input id="show_external_entities" type="checkbox" ${externalEnabled ? "checked" : ""}/> <span>${this._t("settings_show_external_entities")}</span></label>
-              <button type="button" class="external-collapse-btn" data-external-toggle>
-                ${this._externalSectionExpanded ? this._t("settings_external_config_close") : this._t("settings_external_config_open")}
-              </button>
+              <details id="external_config_details" class="external-config-details" ${this._externalSectionExpanded ? "open" : ""}>
+                <summary class="external-collapse-btn" data-external-summary>
+                  <span data-external-toggle-label>${this._externalSectionExpanded ? this._t("settings_external_config_close") : this._t("settings_external_config_open")}</span>
+                </summary>
+              </details>
             </div>
             <div class="external-summary">${this._t("settings_external_selected_count")}: ${selectedExternalCount}</div>
             ${
@@ -4543,9 +4633,6 @@ class Byd3DCardEditor extends HTMLElement {
                     ${this._renderExternalEntityIconRows()}
                   </div>
                 </div>
-                <datalist id="mdi_icon_suggestions">
-                  ${this._renderIconSuggestions()}
-                </datalist>
               </div>
             `
                 : ""
@@ -4677,6 +4764,15 @@ class Byd3DCardEditor extends HTMLElement {
           color: rgba(207,225,242,.8);
           font-weight: 700;
         }
+        .external-config-details {
+          margin: 0;
+        }
+        .external-config-details summary {
+          list-style: none;
+        }
+        .external-config-details summary::-webkit-details-marker {
+          display: none;
+        }
         .external-collapse-btn {
           border: 1px solid rgba(120, 196, 255, .35);
           background: linear-gradient(180deg, rgba(0,184,255,.2), rgba(0,184,255,.07));
@@ -4686,6 +4782,9 @@ class Byd3DCardEditor extends HTMLElement {
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
+          user-select: none;
+          display: inline-flex;
+          align-items: center;
           transition: transform .15s ease, filter .15s ease, box-shadow .2s ease;
         }
         .external-collapse-btn:hover {
@@ -4842,34 +4941,39 @@ class Byd3DCardEditor extends HTMLElement {
         }
         .entity-icons-grid {
           display: grid;
-          gap: 8px;
+          gap: 6px;
         }
         .entity-icon-row {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
-          gap: 8px;
-          align-items: start;
-          padding: 8px 10px;
-          border-radius: 12px;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+          gap: 7px;
+          align-items: center;
+          padding: 7px 9px;
+          border-radius: 10px;
           border: 1px solid rgba(157,190,220,.18);
           background: linear-gradient(180deg, rgba(20,29,40,.86), rgba(15,21,30,.9));
         }
         .entity-icon-label {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 700;
           color: #f3fbff;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .entity-icon-row input[type="text"] {
-          min-height: 40px;
-          font-size: 13px;
-          padding: 0 10px;
-        }
         .entity-icon-inputs {
           display: grid;
-          gap: 6px;
+          gap: 5px;
+        }
+        .entity-icon-inputs.compact {
+          grid-template-columns: minmax(0, 1fr);
+          align-items: center;
+        }
+        .entity-name-input-compact,
+        .icon-combobox-input input[type="text"] {
+          min-height: 34px;
+          font-size: 12px;
+          padding: 0 9px;
         }
         .entity-inline-label {
           font-size: 11px;
@@ -4879,16 +4983,90 @@ class Byd3DCardEditor extends HTMLElement {
         }
         .entity-icon-edit-row {
           display: grid;
-          grid-template-columns: 34px minmax(0, 1fr);
+          grid-template-columns: 24px minmax(0, 1fr);
           align-items: center;
-          gap: 7px;
+          gap: 6px;
         }
         .entity-icon-edit-row ha-icon {
-          width: 22px;
-          height: 22px;
-          --mdc-icon-size: 22px;
+          width: 18px;
+          height: 18px;
+          --mdc-icon-size: 18px;
           color: #bde2ff;
           justify-self: center;
+        }
+        .icon-combobox {
+          position: relative;
+        }
+        .icon-combobox-input {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 30px;
+          gap: 6px;
+          align-items: center;
+        }
+        .icon-dropdown-toggle {
+          width: 30px;
+          height: 30px;
+          border: 1px solid rgba(157,190,220,.22);
+          border-radius: 8px;
+          background: linear-gradient(180deg, rgba(20,29,40,.9), rgba(12,18,28,.94));
+          color: #cbe6ff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 0;
+        }
+        .icon-dropdown-toggle ha-icon {
+          --mdc-icon-size: 16px;
+        }
+        .icon-dropdown {
+          position: absolute;
+          top: calc(100% + 5px);
+          left: 0;
+          right: 0;
+          z-index: 6;
+          display: none;
+          gap: 4px;
+          max-height: 170px;
+          overflow: auto;
+          padding: 6px;
+          border-radius: 10px;
+          border: 1px solid rgba(157,190,220,.24);
+          background: linear-gradient(180deg, rgba(13,19,30,.98), rgba(10,15,24,.98));
+          box-shadow: 0 14px 26px rgba(0,0,0,.42);
+        }
+        .icon-combobox.open .icon-dropdown {
+          display: grid;
+        }
+        .icon-dropdown-option {
+          border: 1px solid rgba(157,190,220,.18);
+          border-radius: 8px;
+          background: rgba(255,255,255,.03);
+          color: #e8f2fb;
+          min-height: 30px;
+          padding: 4px 7px;
+          display: grid;
+          grid-template-columns: 16px minmax(0, 1fr);
+          gap: 7px;
+          align-items: center;
+          text-align: left;
+          cursor: pointer;
+        }
+        .icon-dropdown-option ha-icon {
+          --mdc-icon-size: 16px;
+          color: #bde2ff;
+        }
+        .icon-dropdown-option span {
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .icon-dropdown-empty {
+          font-size: 12px;
+          color: rgba(207,225,242,.8);
+          text-align: center;
+          padding: 8px 6px;
         }
         small {
           color: rgba(207,225,242,.7);
@@ -5204,19 +5382,14 @@ class Byd3DCardEditor extends HTMLElement {
         ),
       });
 
-    if (!this._editorClickDelegationBound) {
-      this.shadowRoot.addEventListener("click", (ev) => {
-        const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
-        const toggleBtn = path.find(
-          (node) => node instanceof HTMLElement && node.hasAttribute && node.hasAttribute("data-external-toggle")
-        );
-        if (!toggleBtn) return;
-        ev.preventDefault();
-        ev.stopPropagation();
-        this._externalSectionExpanded = !this._externalSectionExpanded;
+    const externalDetails = this.shadowRoot.getElementById("external_config_details");
+    if (externalDetails) {
+      externalDetails.addEventListener("toggle", () => {
+        const expanded = Boolean(externalDetails.open);
+        if (expanded === this._externalSectionExpanded) return;
+        this._externalSectionExpanded = expanded;
         this._render();
       });
-      this._editorClickDelegationBound = true;
     }
 
     const bindChange = (id) => {
@@ -5263,22 +5436,91 @@ class Byd3DCardEditor extends HTMLElement {
       });
     });
 
+    const findByDataAttr = (attr, value) =>
+      [...this.shadowRoot.querySelectorAll(`[${attr}]`)].find((node) => node.getAttribute(attr) === value);
+    const findAllByDataAttr = (attr, value) =>
+      [...this.shadowRoot.querySelectorAll(`[${attr}]`)].filter((node) => node.getAttribute(attr) === value);
+    const closeAllIconComboboxes = (exceptEntityId = "") => {
+      this.shadowRoot.querySelectorAll("[data-icon-combobox]").forEach((node) => {
+        const entityId = node.getAttribute("data-icon-combobox");
+        if (exceptEntityId && entityId === exceptEntityId) return;
+        node.classList.remove("open");
+      });
+    };
+    const refreshIconDropdown = (entityId, queryValue) => {
+      const dropdown = findByDataAttr("data-icon-dropdown", entityId);
+      if (!dropdown) return;
+      dropdown.innerHTML = this._renderIconDropdownOptions(entityId, queryValue);
+      findAllByDataAttr("data-icon-select", entityId).forEach((btn) => {
+        btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+        btn.addEventListener("click", () => {
+          const iconValue = btn.getAttribute("data-icon-value") || "";
+          const input = findByDataAttr("data-custom-icon-input", entityId);
+          if (!input) return;
+          input.value = iconValue;
+          this._setCustomEntityIcon(entityId, iconValue);
+          const preview = findByDataAttr("data-custom-icon-preview", entityId);
+          if (preview) preview.setAttribute("icon", iconValue);
+          const combobox = findByDataAttr("data-icon-combobox", entityId);
+          combobox?.classList.remove("open");
+        });
+      });
+    };
+
     this.shadowRoot.querySelectorAll("[data-custom-icon-input]").forEach((input) => {
       input.addEventListener("input", () => {
         const entityId = input.getAttribute("data-custom-icon-input");
         if (!entityId) return;
-        const preview = [...this.shadowRoot.querySelectorAll("[data-custom-icon-preview]")].find(
-          (node) => node.getAttribute("data-custom-icon-preview") === entityId
-        );
+        const preview = findByDataAttr("data-custom-icon-preview", entityId);
         if (preview) {
-          const icon = this._normalizeIconInputValue(input.value) || this._customEntityIcon(entityId);
+          const icon = this._normalizeIconInputValue(input.value) || this._editorEntityIcon(entityId);
           preview.setAttribute("icon", icon);
         }
+        closeAllIconComboboxes(entityId);
+        const combobox = findByDataAttr("data-icon-combobox", entityId);
+        if (combobox) combobox.classList.add("open");
+        refreshIconDropdown(entityId, input.value);
+      });
+      input.addEventListener("focus", () => {
+        const entityId = input.getAttribute("data-custom-icon-input");
+        if (!entityId) return;
+        closeAllIconComboboxes(entityId);
+        const combobox = findByDataAttr("data-icon-combobox", entityId);
+        if (combobox) combobox.classList.add("open");
+        refreshIconDropdown(entityId, input.value);
+      });
+      input.addEventListener("blur", () => {
+        const entityId = input.getAttribute("data-custom-icon-input");
+        if (!entityId) return;
+        setTimeout(() => {
+          const combobox = findByDataAttr("data-icon-combobox", entityId);
+          combobox?.classList.remove("open");
+        }, 120);
       });
       input.addEventListener("change", () => {
         const entityId = input.getAttribute("data-custom-icon-input");
         if (!entityId) return;
         this._setCustomEntityIcon(entityId, input.value);
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-icon-dropdown-toggle]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const entityId = btn.getAttribute("data-icon-dropdown-toggle");
+        if (!entityId) return;
+        const combobox = findByDataAttr("data-icon-combobox", entityId);
+        if (!combobox) return;
+        const willOpen = !combobox.classList.contains("open");
+        closeAllIconComboboxes(entityId);
+        if (!willOpen) {
+          combobox.classList.remove("open");
+          return;
+        }
+        combobox.classList.add("open");
+        const input = findByDataAttr("data-custom-icon-input", entityId);
+        refreshIconDropdown(entityId, input?.value || "");
       });
     });
 
