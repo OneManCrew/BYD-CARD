@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.8";
+const CARD_VERSION = "1.0.9";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -4209,7 +4209,7 @@ class Byd3DCardEditor extends HTMLElement {
 
     const results = this._allEntityIds().filter((entityId) => {
       if (selected.has(entityId)) return false;
-      const name = String(this._hass.states[entityId]?.attributes?.friendly_name || entityId);
+      const name = String(this._hass?.states?.[entityId]?.attributes?.friendly_name || entityId);
       return (
         !search ||
         name.toLowerCase().includes(search) ||
@@ -4222,7 +4222,7 @@ class Byd3DCardEditor extends HTMLElement {
     }
 
     return results.slice(0, 40).map((entityId) => {
-      const st = this._hass.states[entityId];
+      const st = this._hass?.states?.[entityId];
       const name = st?.attributes?.friendly_name || entityId;
       const icon = this._editorEntityIcon(entityId);
       return `
@@ -4247,7 +4247,7 @@ class Byd3DCardEditor extends HTMLElement {
     }
 
     return selected.map((entityId) => {
-      const st = this._hass.states[entityId];
+      const st = this._hass?.states?.[entityId];
       const name = st?.attributes?.friendly_name || entityId;
       const customName = String(this._config?.custom_entity_names?.[entityId] || "").trim();
       const icon = this._editorEntityIcon(entityId);
