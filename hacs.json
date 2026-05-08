@@ -1,6 +1,7 @@
 {
   "name": "BYD 3D Card",
   "filename": "byd-3d-card-hacs.js",
+  "zip_release": true,
   "render_readme": true,
-  "content_in_root": false
+  "content_in_root": true
 }

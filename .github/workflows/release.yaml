@@ -25,11 +25,18 @@ jobs:
           test -f dist/byd-3d-card-hacs.js
           test -f dist/byd-3d-card.js
 
+      - name: Package dist as zip
+        run: |
+          cd dist
+          zip -r ../BYD-CARD.zip .
+          cd ..
+          echo "Zip contents:"
+          unzip -l BYD-CARD.zip
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
           files: |
-            dist/byd-3d-card-hacs.js
-            dist/byd-3d-card.js
+            BYD-CARD.zip
