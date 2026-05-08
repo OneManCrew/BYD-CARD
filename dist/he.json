@@ -14,6 +14,8 @@
   "range_km": "ק״מ",
   "speed_kmh": "קמ״ש",
   "odometer_km": "ק״מ",
+  "fuel_level": "מפלס דלק",
+  "fuel_range": "טווח דלק",
   "interior_temp": "טמפ׳ פנים",
   "exterior_temp": "טמפ׳ חוץ",
   "speed": "מהירות",

@@ -14,6 +14,8 @@
   "range_km": "km",
   "speed_kmh": "km/h",
   "odometer_km": "km",
+  "fuel_level": "Fuel level",
+  "fuel_range": "Fuel range",
   "interior_temp": "Cabin temp",
   "exterior_temp": "Exterior temp",
   "speed": "Speed",

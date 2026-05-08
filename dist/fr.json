@@ -14,6 +14,8 @@
   "range_km": "km",
   "speed_kmh": "km/h",
   "odometer_km": "km",
+  "fuel_level": "Niveau carburant",
+  "fuel_range": "Autonomie carburant",
   "interior_temp": "Temp. intérieure",
   "exterior_temp": "Temp. extérieure",
   "speed": "Vitesse",

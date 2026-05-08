@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.15";
+const CARD_VERSION = "1.0.16";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -204,6 +204,8 @@ const ENTITY_HINTS = {
   windows: { domains: ["binary_sensor"], suffixes: ["windows", "is_any_window_open"] },
   speed: { domains: ["sensor"], suffixes: ["speed"] },
   odometer: { domains: ["sensor"], suffixes: ["odometer", "total_mileage", "total_mileage_v2"] },
+  fuel_level: { domains: ["sensor"], suffixes: ["fuel_level", "oil_percent"] },
+  fuel_range: { domains: ["sensor"], suffixes: ["fuel_range", "oil_endurance"] },
   lock: { domains: ["lock", "binary_sensor"], suffixes: ["lock", "locked"] },
   online: { domains: ["binary_sensor", "sensor"], suffixes: ["online", "is_online"] },
   tire_fl: { domains: ["sensor"], suffixes: ["front_left_tire_pressure", "left_front_tire_pressure"] },
@@ -352,6 +354,8 @@ const FALLBACK_I18N = {
   range_km: "ק״מ",
   speed_kmh: "קמ״ש",
   odometer_km: "ק״מ",
+  fuel_level: "מפלס דלק",
+  fuel_range: "טווח דלק",
   interior_temp: "טמפ׳ פנים",
   exterior_temp: "טמפ׳ חוץ",
   speed: "מהירות",
@@ -2100,12 +2104,20 @@ class Byd3DCard extends HTMLElement {
       `
       : "";
 
+    const fuelLevelState = this._state("fuel_level");
+    const fuelRangeState = this._state("fuel_range");
+    const hasFuel = fuelLevelState || fuelRangeState;
+    const fuelMetrics = hasFuel
+      ? `${fuelLevelState ? this._metric(this._t("fuel_level"), `${fuelLevelState.state ?? "-"}%`) : ""}${fuelRangeState ? this._metric(this._t("fuel_range"), `${fuelRangeState.state ?? "-"} ${this._t("range_km")}`) : ""}`
+      : "";
+
     const summaryMetrics = `
       <div class="metrics-grid">
         ${this._metric(this._t("interior_temp"), `${cabinTempState?.state ?? "-"}°C`)}
         ${this._metric(this._t("exterior_temp"), `${exteriorTempState?.state ?? "-"}°C`)}
         ${this._metric(this._t("speed"), `${speedState?.state ?? "-"} ${this._t("speed_kmh")}`)}
         ${this._metric(this._t("odometer"), `${odoState?.state ?? "-"} ${this._t("odometer_km")}`)}
+        ${fuelMetrics}
       </div>
     `;
 
