@@ -1,0 +1,14 @@
+{
+  "name": "byd-3d-card",
+  "version": "1.0.11",
+  "description": "Dynamic 3D BYD dashboard card for Home Assistant",
+  "author": "Levi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OneManCrew/BYD-CARD"
+  },
+  "scripts": {
+    "bump": "node scripts/bump-version.mjs"
+  }
+}
