@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.16";
+const CARD_VERSION = "1.0.17";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -1795,6 +1795,21 @@ class Byd3DCard extends HTMLElement {
     `;
   }
 
+  _renderSeatActionButton(logicalKey, title, icon) {
+    const eid = this._resolveEntity(logicalKey);
+    if (!eid) return "";
+    const state = this._hass?.states?.[eid];
+    const currentOption = String(state?.state || "").toLowerCase();
+    const isActive = currentOption !== "off" && currentOption !== "unknown" && currentOption !== "unavailable";
+    const feedbackClass = this._buttonFeedbacks?.has(logicalKey) ? "btn-feedback" : "";
+    return `
+      <button class="action-btn ${isActive ? "active" : ""} ${feedbackClass}" data-action="seat_toggle" data-key="${logicalKey}">
+        <ha-icon icon="${icon}"></ha-icon>
+        <span>${title}</span>
+      </button>
+    `;
+  }
+
   _render() {
     if (!this.shadowRoot) return;
     if (!this._config) return;
@@ -1935,20 +1950,30 @@ class Byd3DCard extends HTMLElement {
     const tirePressureUnitLabel = this._tirePressureUnitLabel(tirePressureUnit);
     const tirePressureThresholds = this._tirePressureThresholds(tirePressureUnit);
 
+    const tireStatusMap = {
+      tire_fl: lfTireStatusState,
+      tire_fr: rfTireStatusState,
+      tire_rl: lrTireStatusState,
+      tire_rr: rrTireStatusState,
+    };
+
     const tireCards = tireKeys
       .map(([key, label]) => {
         const pressure = this._tirePressureDisplayValue(key, tirePressureUnit);
+        const tireStatus = tireStatusMap[key];
+        const hasTireWarning = tireStatus?.state === "on";
         const color =
           pressure === null
             ? "#8aa0b5"
-            : pressure < tirePressureThresholds.critical
+            : hasTireWarning || pressure < tirePressureThresholds.critical
               ? "#ff5a4d"
               : pressure < tirePressureThresholds.low
                 ? "#ffb252"
                 : "#7ce89e";
+        const warnIcon = hasTireWarning ? `<ha-icon icon="mdi:alert-circle" style="color:#ff5a4d;--mdc-icon-size:16px;margin-inline-start:4px;vertical-align:middle;"></ha-icon>` : "";
         return `
-          <div class="tire-card ${pressure !== null && pressure < tirePressureThresholds.critical ? "warn" : ""}">
-            <div class="tire-title">${label}</div>
+          <div class="tire-card ${hasTireWarning || (pressure !== null && pressure < tirePressureThresholds.critical) ? "warn" : ""}">
+            <div class="tire-title">${label}${warnIcon}</div>
             <div class="tire-value" style="color:${color}">${this._formatTirePressure(pressure, tirePressureUnit)} ${tirePressureUnitLabel}</div>
           </div>
         `;
@@ -2231,6 +2256,8 @@ class Byd3DCard extends HTMLElement {
               ${this._renderActionButton("flash_lights", this._getButtonText("flash_lights", this._t("flash_lights")), "mdi:car-light-high", "press")}
               ${this._renderActionButton("find_car", this._getButtonText("find_car", this._t("find_car")), "mdi:car-search", "press")}
               ${this._renderActionButton("close_windows", this._getButtonText("close_windows", this._t("close_windows")), "mdi:window-closed-variant", "press")}
+              ${this._renderSeatActionButton("driver_seat_ventilation", this._t("seat_driver") + " - " + this._t("seat_mode_cool"), "mdi:car-seat-cooler")}
+              ${this._renderSeatActionButton("passenger_seat_ventilation", this._t("seat_passenger") + " - " + this._t("seat_mode_cool"), "mdi:car-seat-cooler")}
             </div>
           `
         , { icon: "mdi:gesture-tap-button" })
@@ -3755,6 +3782,16 @@ class Byd3DCard extends HTMLElement {
             this._buttonFeedbacks.set(key, { text: this._t("executed"), until: Date.now() + 2000 });
           }
           this._render();
+        }
+        if (action === "seat_toggle") {
+          const eid = this._resolveEntity(key);
+          if (!eid) return;
+          const state = this._hass?.states?.[eid];
+          const current = String(state?.state || "").toLowerCase();
+          const options = state?.attributes?.options || [];
+          const isActive = current !== "off" && current !== "unknown" && current !== "unavailable";
+          const nextOption = isActive ? "off" : (options.find((o) => o.toLowerCase() !== "off") || "low");
+          this._callSelectOption(key, nextOption);
         }
       });
     });
