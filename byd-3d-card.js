@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.17";
+const CARD_VERSION = "1.0.18";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -1801,11 +1801,13 @@ class Byd3DCard extends HTMLElement {
     const state = this._hass?.states?.[eid];
     const currentOption = String(state?.state || "").toLowerCase();
     const isActive = currentOption !== "off" && currentOption !== "unknown" && currentOption !== "unavailable";
+    const stateLabel = this._t(`level_${currentOption}`) || currentOption;
     const feedbackClass = this._buttonFeedbacks?.has(logicalKey) ? "btn-feedback" : "";
     return `
-      <button class="action-btn ${isActive ? "active" : ""} ${feedbackClass}" data-action="seat_toggle" data-key="${logicalKey}">
+      <button class="action-btn ${isActive ? "active" : ""} ${feedbackClass}" data-action="seat_cycle" data-key="${logicalKey}">
         <ha-icon icon="${icon}"></ha-icon>
         <span>${title}</span>
+        <span class="seat-action-state">${stateLabel}</span>
       </button>
     `;
   }
@@ -3421,6 +3423,11 @@ class Byd3DCard extends HTMLElement {
           width: 100%;
           display: inline-block;
         }
+        .seat-action-state {
+          font-size: 11px;
+          opacity: 0.75;
+          margin-top: 2px;
+        }
         .location-actions {
           margin-top: 10px;
           display: grid;
@@ -3783,14 +3790,14 @@ class Byd3DCard extends HTMLElement {
           }
           this._render();
         }
-        if (action === "seat_toggle") {
+        if (action === "seat_cycle") {
           const eid = this._resolveEntity(key);
           if (!eid) return;
           const state = this._hass?.states?.[eid];
           const current = String(state?.state || "").toLowerCase();
-          const options = state?.attributes?.options || [];
-          const isActive = current !== "off" && current !== "unknown" && current !== "unavailable";
-          const nextOption = isActive ? "off" : (options.find((o) => o.toLowerCase() !== "off") || "low");
+          const options = (state?.attributes?.options || []).map((o) => o.toLowerCase());
+          const idx = options.indexOf(current);
+          const nextOption = options[(idx + 1) % options.length] || "off";
           this._callSelectOption(key, nextOption);
         }
       });
