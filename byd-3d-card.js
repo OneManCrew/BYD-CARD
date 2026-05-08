@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.14";
+const CARD_VERSION = "1.0.15";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -204,7 +204,7 @@ const ENTITY_HINTS = {
   windows: { domains: ["binary_sensor"], suffixes: ["windows", "is_any_window_open"] },
   speed: { domains: ["sensor"], suffixes: ["speed"] },
   odometer: { domains: ["sensor"], suffixes: ["odometer", "total_mileage", "total_mileage_v2"] },
-  lock: { domains: ["lock"], suffixes: ["lock"] },
+  lock: { domains: ["lock", "binary_sensor"], suffixes: ["lock", "locked"] },
   online: { domains: ["binary_sensor", "sensor"], suffixes: ["online", "is_online"] },
   tire_fl: { domains: ["sensor"], suffixes: ["front_left_tire_pressure", "left_front_tire_pressure"] },
   tire_fr: { domains: ["sensor"], suffixes: ["front_right_tire_pressure", "right_front_tire_pressure"] },
@@ -1096,6 +1096,12 @@ class Byd3DCard extends HTMLElement {
     if (state === "off") return this._t("no");
     if (state === "locked") return this._t("locked");
     if (state === "unlocked") return this._t("unlocked");
+    return this._t("not_available");
+  }
+
+  _lockLabel(state) {
+    if (state === "locked" || state === "off") return this._t("locked");
+    if (state === "unlocked" || state === "on") return this._t("unlocked");
     return this._t("not_available");
   }
 
@@ -2046,7 +2052,7 @@ class Byd3DCard extends HTMLElement {
     if (windowsState?.state === "on") {
       pushIndicator("windows_open", "mdi:window-open", this._t("windows"), "warn", canCloseWindows);
     }
-    if (lockState?.state === "unlocked") {
+    if (lockState?.state === "unlocked" || lockState?.state === "on") {
       pushIndicator("lock_open", "mdi:lock-open-variant-outline", this._t("lock"), "warn", canToggleLock);
     }
     if (chargingState?.state === "on") {
@@ -2181,7 +2187,7 @@ class Byd3DCard extends HTMLElement {
               <div class="metrics-grid vehicle-metrics">
               ${this._metric(this._t("doors"), this._openClosedLabel(doorsState?.state))}
               ${this._metric(this._t("windows"), this._openClosedLabel(windowsState?.state))}
-              ${this._metric(this._t("lock"), this._boolLabel(lockState?.state))}
+              ${this._metric(this._t("lock"), this._lockLabel(lockState?.state))}
               ${this._metric(this._t("online"), this._boolLabel(onlineState?.state))}
               ${this._metric(this._t("speed"), `${speedState?.state ?? "-"} ${this._t("speed_kmh")}`)}
               ${this._metric(this._t("odometer"), `${odoState?.state ?? "-"} ${this._t("odometer_km")}`)}
