@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.13";
+const CARD_VERSION = "1.0.14";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -187,7 +187,7 @@ const PROFILE_DEFAULTS = {
   seal: { title: "BYD SEAL", entity_prefix: "byd_seal" },
   dolphin: { title: "BYD DOLPHIN", entity_prefix: "byd_dolphin" },
   sealion7: { title: "BYD SEALION 7", entity_prefix: "byd_sealion_7" },
-  seal_u_dmi: { title: "BYD SEAL U DM-i", entity_prefix: "byd_seal_u_dmi" },
+  seal_u_dmi: { title: "BYD SEAL U DM-i", entity_prefix: "byd_seal_u_dm_i" },
 };
 
 const ENTITY_HINTS = {
@@ -1034,9 +1034,11 @@ class Byd3DCard extends HTMLElement {
     }
 
     // Soft fallback for users with renamed object ids.
+    // Only search if prefix is set and must contain the prefix to avoid cross-vehicle matches.
+    if (!prefix) return null;
     const ids = Object.keys(all);
     for (const domain of hint.domains) {
-      const pool = ids.filter((id) => id.startsWith(`${domain}.`));
+      const pool = ids.filter((id) => id.startsWith(`${domain}.`) && id.includes(prefix));
       for (const suffix of suffixes) {
         const found = pool.find((id) => id.endsWith(`_${suffix}`));
         if (found) return found;
