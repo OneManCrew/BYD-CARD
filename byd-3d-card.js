@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.11";
+const CARD_VERSION = "1.0.12";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -123,6 +123,35 @@ const PROFILE_IMAGES = {
   <text x="74" y="92" fill="#ecf4ff" font-size="48" font-family="ui-sans-serif,Arial" font-weight="700">BYD SEALION 7</text>
 </svg>
 `),
+  seal_u_dmi:
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520">
+  <defs>
+    <linearGradient id="bg5" x1="0" x2="1">
+      <stop offset="0%" stop-color="#2a3040"/>
+      <stop offset="100%" stop-color="#0e1219"/>
+    </linearGradient>
+    <linearGradient id="car5" x1="0" x2="1">
+      <stop offset="0%" stop-color="#e8edf4"/>
+      <stop offset="60%" stop-color="#b8c6d6"/>
+      <stop offset="100%" stop-color="#8a9cb0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="520" fill="url(#bg5)"/>
+  <ellipse cx="600" cy="428" rx="438" ry="48" fill="rgba(0,0,0,0.40)"/>
+  <path d="M158 336c28-62 96-112 175-128l176-30c44-7 88-4 130 10l178 56c52 17 98 48 132 90l36 46H140l18-44z" fill="url(#car5)"/>
+  <path d="M320 276l140-48c40-14 84-13 124 3l176 62c24 8 46 22 62 40H288z" fill="#1a2838"/>
+  <path d="M370 276h470c12 0 22 10 22 22v6H349v-6c0-12 10-22 21-22z" fill="#283848"/>
+  <circle cx="348" cy="384" r="71" fill="#121a24"/>
+  <circle cx="348" cy="384" r="39" fill="#92a3b4"/>
+  <circle cx="855" cy="384" r="71" fill="#121a24"/>
+  <circle cx="855" cy="384" r="39" fill="#92a3b4"/>
+  <rect x="248" y="334" width="98" height="18" rx="9" fill="#d4e4f2"/>
+  <rect x="862" y="334" width="86" height="18" rx="9" fill="#d4e4f2"/>
+  <text x="74" y="92" fill="#eaf3ff" font-size="44" font-family="ui-sans-serif,Arial" font-weight="700">BYD SEAL U DM-i</text>
+</svg>
+`),
 };
 
 const VEHICLE_PROFILES = {
@@ -146,6 +175,11 @@ const VEHICLE_PROFILES = {
     image: PROFILE_IMAGES.sealion7,
     icon: "mdi:car-estate",
   },
+  seal_u_dmi: {
+    label: "BYD SEAL U DM-i",
+    image: PROFILE_IMAGES.seal_u_dmi,
+    icon: "mdi:car-electric",
+  },
 };
 
 const PROFILE_DEFAULTS = {
@@ -153,6 +187,7 @@ const PROFILE_DEFAULTS = {
   seal: { title: "BYD SEAL", entity_prefix: "byd_seal" },
   dolphin: { title: "BYD DOLPHIN", entity_prefix: "byd_dolphin" },
   sealion7: { title: "BYD SEALION 7", entity_prefix: "byd_sealion_7" },
+  seal_u_dmi: { title: "BYD SEAL U DM-i", entity_prefix: "byd_seal_u_dmi" },
 };
 
 const ENTITY_HINTS = {
@@ -1036,6 +1071,7 @@ class Byd3DCard extends HTMLElement {
       seal: `${basePath}/seal.png`,
       dolphin: `${basePath}/byd_dolphin.png`,
       sealion7: `${basePath}/sealion.png`,
+      seal_u_dmi: `${basePath}/byd_seal_u_dmi.png`,
     };
     return localMap[profileKey] || null;
   }
@@ -4053,6 +4089,7 @@ class Byd3DCardEditor extends HTMLElement {
           seal: `${basePath}/seal.png`,
           dolphin: `${basePath}/byd_dolphin.png`,
           sealion7: `${basePath}/sealion.png`,
+          seal_u_dmi: `${basePath}/byd_seal_u_dmi.png`,
         };
         const localImage = localImages[key] || profile.image;
         return `

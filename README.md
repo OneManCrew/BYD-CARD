@@ -53,10 +53,15 @@ A premium Home Assistant Lovelace card for **BYD electric vehicles** — featuri
 | BYD SEAL | `seal` | `byd_seal` |
 | BYD DOLPHIN | `dolphin` | `byd_dolphin` |
 | BYD SEALION 7 | `sealion7` | `byd_sealion_7` |
+| BYD SEAL U DM-i | `seal_u_dmi` | `byd_seal_u_dmi` |
 
-| ATTO 3 | SEAL | DOLPHIN | SEALION 7 |
-|---|---|---|---|
-| ![ATTO 3](pic/bydatoo3.png) | ![SEAL](pic/seal.png) | ![DOLPHIN](pic/byd_dolphin.png) | ![SEALION 7](pic/sealion.png) |
+| ATTO 3 | SEAL | DOLPHIN |
+|---|---|---|
+| ![ATTO 3](pic/bydatoo3.png) | ![SEAL](pic/seal.png) | ![DOLPHIN](pic/byd_dolphin.png) |
+
+| SEALION 7 | SEAL U DM-i |
+|---|---|
+| ![SEALION 7](pic/sealion.png) | ![SEAL U DM-i](pic/seal_u_dmi.png) |
 
 ---
 
@@ -77,7 +82,7 @@ A premium Home Assistant Lovelace card for **BYD electric vehicles** — featuri
 - **Quick Actions** — lock/unlock, A/C, battery heat, flash lights, find car, close windows
 
 ### Customization
-- **4 vehicle profiles** with dedicated images
+- **5 vehicle profiles** with dedicated images
 - **4 languages** — Hebrew, English, Russian, French
 - **Drag & drop** category ordering in the visual editor
 - **Custom entities** — add any HA entity as a quick-action button on the hero image

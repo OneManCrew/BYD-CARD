@@ -26,6 +26,7 @@ jobs:
           test -f dist/byd_dolphin.png
           test -f dist/seal.png
           test -f dist/sealion.png
+          test -f dist/byd_seal_u_dmi.png
           test -f dist/he.json
           test -f dist/en.json
           test -f dist/ru.json
