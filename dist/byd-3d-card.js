@@ -4,7 +4,7 @@
 
 const CARD_TYPE = "byd-3d-card";
 const CARD_NAME = "BYD 3D Card";
-const CARD_VERSION = "1.0.19";
+const CARD_VERSION = "1.0.20";
 const DEFAULT_ASSET_BASE_PATH = (() => {
   try {
     const base = new URL(".", import.meta.url).pathname;
@@ -356,6 +356,9 @@ const FALLBACK_I18N = {
   odometer_km: "ק״מ",
   fuel_level: "מפלס דלק",
   fuel_range: "טווח דלק",
+  level_off: "כבוי",
+  level_low: "נמוך",
+  level_high: "גבוה",
   interior_temp: "טמפ׳ פנים",
   exterior_temp: "טמפ׳ חוץ",
   speed: "מהירות",
@@ -3794,9 +3797,9 @@ class Byd3DCard extends HTMLElement {
           const eid = this._resolveEntity(key);
           if (!eid) return;
           const state = this._hass?.states?.[eid];
-          const current = String(state?.state || "").toLowerCase();
-          const options = (state?.attributes?.options || []).map((o) => o.toLowerCase());
-          const idx = options.indexOf(current);
+          const current = String(state?.state || "");
+          const options = state?.attributes?.options || [];
+          const idx = options.findIndex((o) => o.toLowerCase() === current.toLowerCase());
           const nextOption = options[(idx + 1) % options.length] || "off";
           this._callSelectOption(key, nextOption);
         }
