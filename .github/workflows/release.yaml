@@ -22,8 +22,11 @@ jobs:
       - name: Verify dist layout
         run: |
           set -euo pipefail
-          test -f dist/byd-3d-card-hacs.js
           test -f dist/byd-3d-card.js
+
+      - name: Prepare dist for zip
+        run: |
+          cp dist/byd-3d-card.js dist/BYD-CARD.js
 
       - name: Package dist as zip
         run: |
@@ -37,5 +40,4 @@ jobs:
           name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
           files: |
-            dist/byd-3d-card-hacs.js
             BYD-CARD.zip
